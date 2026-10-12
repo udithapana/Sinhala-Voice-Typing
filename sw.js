@@ -1,6 +1,6 @@
 /* Katha Liyana service worker.
    Change VERSION whenever you upload new files, so phones pick up the update. */
-const VERSION = "katha-v2";
+const VERSION = "katha-v3";
 const SHARE_CACHE = "katha-share";
 const SHELL = [
   "./",

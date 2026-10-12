@@ -7,6 +7,12 @@ Speak in Sinhala, Tamil or English and get clean text.
 - **Write as**: get the text as spoken, as an English translation, or both (Sinhala paragraph, then English).
 - **Translate button**: translates the selected text (or all text) Sinhala ↔ English. Then copy it, add it below the original, or replace the original.
 - **Audio files**: tap the file button (or drag a file onto the page) to turn a voice note, MP3, M4A, WAV, OGG/OPUS or video into text. Long files (up to about an hour) are split at pauses and written part by part.
+- **Voice cleanup** (Off / Normal / Strong): before the AI listens, the app removes rumble and 50 Hz hum, tames the boom of deep voices, lifts consonant clarity, removes background noise, and raises quiet or distant speech. A before/after player lets you compare and save the cleaned audio.
+- **AI accuracy: Best**: uses the strongest Gemini model on your key and gives it both the cleaned and the original audio. Falls back to the fast model if Pro isn't available.
+- **Several speakers**: labels each person's lines (Speaker 1, Speaker 2, or names you enter), kept consistent across long recordings.
+- **Context**: a topic hint, plus the end of the previous part, helps the AI recover unclear words from meaning.
+- **2 microphones**: stereo files and devices that give two mic channels are aligned, weighted toward the cleaner mic, and diffuse noise is reduced.
+- **Live voice boost** (Chrome on a computer): cleans and lifts the mic sound before Chrome's speech engine hears it.
 - **Share from WhatsApp (Android)**: once installed, long-press a voice note → Share → කතා ලියන. Shared text can also be sent to the app and translated.
 
 ## Files
@@ -46,7 +52,15 @@ The key is stored only in the browser on that device.
 - Translation style (Natural or Formal) and your special words list are in Settings.
 - Very long files use more of your free Gemini quota. If the limit is reached, the app waits and retries. If it still fails, tap **Retry** and it continues from the part where it stopped.
 
+## Hard-to-hear audio
+
+1. Settings → Voice cleanup: **Strong**.
+2. Settings → AI accuracy: **Best**.
+3. Fill in **What the audio is usually about** and your special words.
+4. For meetings or calls, choose **Several people** and add names.
+5. Listen to the before/after player. If the cleaned voice sounds robotic, go back to **Normal**.
+
 ## Updating the app
 
-After changing any file, open `sw.js` and change `VERSION` (for example `katha-v2` → `katha-v3`),
+After changing any file, open `sw.js` and change `VERSION` (for example `katha-v3` → `katha-v4`),
 then upload. Phones get the new version the next time the app is opened.

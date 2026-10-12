@@ -137,6 +137,13 @@ body.dropping .sheet::after{content:"Drop the audio file to turn it into text";p
 #transText{border:0;outline:0;background:transparent;resize:vertical;min-height:140px;width:100%;padding:14px 16px;font:400 18px/1.7 var(--f-text);color:var(--ink)}
 .trans-actions{display:flex;gap:8px;flex-wrap:wrap;padding:0 12px 12px}
 .icon-btn.sm{height:32px;min-width:32px;padding:0 6px}
+.ab{display:flex;flex-direction:column;gap:10px;padding:14px 16px 12px}
+.ab-row{display:grid;grid-template-columns:68px minmax(0,1fr);align-items:center;gap:10px}
+.ab-row span{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.ab-row audio{width:100%;height:40px}
+.ab-note{margin:0;font-size:13px;color:var(--muted)}
+.field .input{width:100%}
+.field .check + .check{margin-top:6px}
 .up{width:52px;height:52px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--ink);display:grid;place-items:center;flex:none}
 .up svg{width:22px;height:22px}
 .up:disabled{opacity:.45;cursor:not-allowed}
@@ -232,6 +239,21 @@ dialog::backdrop{background:rgba(5,10,8,.5)}
     <div id="interim" hidden aria-live="polite"></div>
   </section>
 
+  <section class="trans" id="audioPanel" hidden aria-label="Voice cleanup check">
+    <div class="trans-bar">
+      <span class="trans-title">Voice cleanup · listen and compare</span>
+      <button class="icon-btn sm" id="abClose" aria-label="Close voice cleanup check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+    <div class="ab">
+      <div class="ab-row"><span>Original</span><audio id="abOrig" controls preload="metadata"></audio></div>
+      <div class="ab-row"><span>Cleaned</span><audio id="abClean" controls preload="metadata"></audio></div>
+      <p class="ab-note"><span id="abInfo"></span>. If the cleaned voice sounds robotic, choose Normal cleanup in Settings. If it's still hard to hear, try Strong.</p>
+    </div>
+    <div class="trans-actions">
+      <button class="tool" id="abSave"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Save cleaned audio</button>
+    </div>
+  </section>
+
   <section class="trans" id="transPanel" hidden aria-label="Translation">
     <div class="trans-bar">
       <span class="trans-title" id="transTitle">English translation</span>
@@ -311,6 +333,40 @@ dialog::backdrop{background:rgba(5,10,8,.5)}
       <label for="model">AI model</label>
       <select id="model"><option value="gemini-flash-latest">gemini-flash-latest</option></select>
       <p>Flash is fast and cheap. Pro is slower but can be more accurate for difficult audio.</p>
+    </div>
+    <div class="field">
+      <span class="lbl">Voice cleanup (before the AI listens)</span>
+      <div class="radio">
+        <label><input type="radio" name="cleanup" value="off"><span>Off<small>Send the audio as it is.</small></span></label>
+        <label><input type="radio" name="cleanup" value="normal" checked><span>Normal<small>Removes hum and background noise, evens out the voice.</small></span></label>
+        <label><input type="radio" name="cleanup" value="strong"><span>Strong<small>For deep, quiet or far voices and noisy sites.</small></span></label>
+      </div>
+    </div>
+    <div class="field">
+      <span class="lbl">AI accuracy</span>
+      <div class="radio">
+        <label><input type="radio" name="accuracy" value="fast" checked><span>Fast<small>Quick, uses little quota. Good for clear speech.</small></span></label>
+        <label><input type="radio" name="accuracy" value="best"><span>Best<small>Strongest model hears both the cleaned and the original audio. Slower.</small></span></label>
+      </div>
+    </div>
+    <div class="field">
+      <span class="lbl">Speakers</span>
+      <div class="radio">
+        <label><input type="radio" name="speakers" value="one" checked><span>One person<small>Dictation and voice notes.</small></span></label>
+        <label><input type="radio" name="speakers" value="many"><span>Several people<small>Meetings and calls. Each person's lines are labelled.</small></span></label>
+      </div>
+      <input class="input" id="spkNames" placeholder="Names, if known (e.g. Nimal, Saman, customer)" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="topic">What the audio is usually about (optional)</label>
+      <input class="input" id="topic" placeholder="e.g. Solar site visit, roof measurements, inverter and panel details" autocomplete="off">
+      <p>Helps the AI choose the right word when the voice is unclear.</p>
+    </div>
+    <div class="field">
+      <span class="lbl">Microphone</span>
+      <label class="check"><input type="checkbox" id="multiMic"> Use 2 microphones when the device or file has them</label>
+      <label class="check"><input type="checkbox" id="liveBoost"> Boost my voice in Live mode (Chrome on a computer)</label>
+      <label class="check"><input type="checkbox" id="markUnclear"> Mark words that can't be heard with [?] instead of guessing</label>
     </div>
     <div class="field">
       <span class="lbl">AI writing style</span>
@@ -510,7 +566,7 @@ function setState(s, text){
   $("#uploadBtn").disabled = s !== "idle";
   $("#cancelBtn").hidden = !(s === "busy" && job);
   timerEl.hidden = s !== "rec";
-  meterEl.hidden = !(s === "rec" && mode === "ai");
+  meterEl.hidden = !(s === "rec" && (mode === "ai" || liveAudio));
   busyLabel = text || (s === "rec" ? (mode === "live" ? "Listening…" : "Recording…") : s === "busy" ? "Working…" : "Ready");
   statusText.textContent = busyLabel;
   hintEl.textContent = s === "rec"
@@ -577,7 +633,40 @@ function trackLive(r){
   else if(r.start === live.start + live.text.length) live.text += r.text;
   else live.broken = true;
 }
-function startLive(){
+/* Live voice boost: clean and lift the mic sound, then give that track to Chrome's speech engine. */
+let liveAudio = null;
+async function openLiveBoost(){
+  if(store.get("liveBoost", isAndroid ? "0" : "1") !== "1") return null;
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true, noiseSuppression:true, autoGainControl:true, channelCount:1}});
+    const AC = window.AudioContext || window.webkitAudioContext, ctx = new AC();
+    const chain = [];
+    const bq = (type, f, q, g) => { const n = ctx.createBiquadFilter(); n.type = type; n.frequency.value = f; n.Q.value = q; if(g !== undefined) n.gain.value = g; chain.push(n); };
+    bq("highpass", 85, 0.7); bq("highpass", 85, 0.7); bq("notch", 100, 25); bq("peaking", 230, 1, -3); bq("peaking", 3000, 0.8, 5);
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -45; comp.knee.value = 20; comp.ratio.value = 4; comp.attack.value = 0.005; comp.release.value = 0.25;
+    const makeup = ctx.createGain(); makeup.gain.value = 4;
+    const lim = ctx.createDynamicsCompressor();
+    lim.threshold.value = -3; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.001; lim.release.value = 0.1;
+    chain.push(comp, makeup, lim);
+    const dest = ctx.createMediaStreamDestination();
+    let prev = ctx.createMediaStreamSource(stream);
+    for(const n of chain){ prev.connect(n); prev = n; }
+    prev.connect(dest);
+    const an = ctx.createAnalyser(); an.fftSize = 512; prev.connect(an);
+    return {ctx, stream, track: dest.stream.getAudioTracks()[0], an};
+  }catch(e){ return null; }
+}
+function closeLiveBoost(){
+  if(!liveAudio) return;
+  try{ liveAudio.stream.getTracks().forEach(t => t.stop()); liveAudio.track.stop(); liveAudio.ctx.close(); }catch(e){}
+  liveAudio = null; stopMeter();
+}
+function recStart(){
+  if(liveAudio && liveAudio.track.readyState === "live"){ try{ rec.start(liveAudio.track); return; }catch(e){} }
+  rec.start();
+}
+async function startLive(){
   if(!SR){ toast("Live mode needs Chrome or Edge. Switch to AI accurate mode.", {error:true}); return; }
   if(outMode() !== "same" && !apiKey()){ openSettings("Add your Gemini API key to translate what you say."); return; }
   rec = new SR();
@@ -608,24 +697,33 @@ function startLive(){
       "language-not-supported": "This browser can't recognise that language live. Use Chrome, or switch to AI accurate mode.",
       "audio-capture": "No microphone found."
     }[e.error];
+    if(e.error === "audio-capture" && liveAudio){
+      // this device can't share the mic between the boost and the speech engine: turn the boost off
+      store.set("liveBoost", "0"); syncChecks();
+      closeLiveBoost();
+      toast("Voice boost doesn't work on this device's Live mode, so it was turned off. Tap the mic again.");
+      liveOn = false; return;
+    }
     if(msg){ liveOn = false; toast(msg, {error:true}); }
   };
   rec.onend = () => {
     if(liveOn){
-      setTimeout(() => { if(liveOn){ try{ rec.start(); }catch(_){} } }, isAndroid ? 50 : 150);
+      setTimeout(() => { if(liveOn){ try{ recStart(); }catch(_){} } }, isAndroid ? 50 : 150);
     }else if(state === "rec"){
-      stopTimer(); setState("idle"); finishLive();
+      stopTimer(); closeLiveBoost(); setState("idle"); finishLive();
     }
   };
-  try{ rec.start(); }catch(e){ toast("Could not start the microphone.", {error:true}); return; }
+  liveAudio = await openLiveBoost();
+  try{ recStart(); }catch(e){ closeLiveBoost(); toast("Could not start the microphone.", {error:true}); return; }
   liveOn = true; startTimer(); setState("rec");
+  if(liveAudio){ meterEl.hidden = false; startMeter(null, liveAudio.an); }
 }
 function stopLive(){
   liveOn = false;
   try{ rec && rec.stop(); }catch(e){}
   const pending = interimEl.textContent.trim();
   if(pending) trackLive(insertText(pending));
-  stopTimer(); setState("idle");
+  stopTimer(); closeLiveBoost(); setState("idle");
   finishLive();
 }
 /* After a live session: translate what was said, if "Write as" asks for it. */
@@ -659,12 +757,14 @@ async function startAI(){
     toast("This browser can't record audio. Use Chrome, Edge, Firefox or Safari.", {error:true}); return;
   }
   try{
-    stream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true, noiseSuppression:true, autoGainControl:true, channelCount:1}});
+    stream = await openMic();
   }catch(e){
     toast("Microphone permission denied. Allow mic access for this site.", {error:true}); return;
   }
+  const stereo = (stream.getAudioTracks()[0]?.getSettings?.().channelCount || 1) >= 2;
   const mime = ["audio/webm;codecs=opus","audio/webm","audio/mp4","audio/ogg;codecs=opus"].find(m => MediaRecorder.isTypeSupported?.(m)) || "";
-  mediaRec = new MediaRecorder(stream, mime ? {mimeType:mime, audioBitsPerSecond:64000} : undefined);
+  mediaRec = new MediaRecorder(stream, mime ? {mimeType:mime, audioBitsPerSecond: stereo ? 128000 : 64000} : undefined);
+  if(stereo) toast("Recording with 2 microphones.");
   chunks = [];
   mediaRec.ondataavailable = e => { if(e.data && e.data.size) chunks.push(e.data); };
   mediaRec.onstop = () => {
@@ -678,14 +778,30 @@ async function startAI(){
   mediaRec.start(1000);
   startMeter(stream); startTimer(); setState("rec");
 }
+/* With "2 microphones" on, ask for raw stereo (phone/laptop processing would merge it to mono).
+   If the device only gives one channel, reopen it with the phone's own noise filter. */
+let micNoted = false;
+async function openMic(){
+  const normal = {audio:{echoCancellation:true, noiseSuppression:true, autoGainControl:true, channelCount:1}};
+  if(store.get("multimic", "1") !== "1") return navigator.mediaDevices.getUserMedia(normal);
+  const s = await navigator.mediaDevices.getUserMedia({audio:{channelCount:{ideal:2}, echoCancellation:false, noiseSuppression:false, autoGainControl:false}});
+  const ch = s.getAudioTracks()[0]?.getSettings?.().channelCount || 1;
+  if(ch >= 2) return s;
+  s.getTracks().forEach(t => t.stop());
+  if(!micNoted){ micNoted = true; hintEl.textContent = "This device gives one microphone channel. Using the normal mic."; }
+  return navigator.mediaDevices.getUserMedia(normal);
+}
 function stopAI(){ if(mediaRec && mediaRec.state !== "inactive") mediaRec.stop(); }
 
-function startMeter(s){
+function startMeter(s, existing){
   try{
-    const AC = window.AudioContext || window.webkitAudioContext;
-    meterCtx = new AC();
-    const src = meterCtx.createMediaStreamSource(s);
-    const an = meterCtx.createAnalyser(); an.fftSize = 512; src.connect(an);
+    let an = existing;
+    if(!an){
+      const AC = window.AudioContext || window.webkitAudioContext;
+      meterCtx = new AC();
+      const src = meterCtx.createMediaStreamSource(s);
+      an = meterCtx.createAnalyser(); an.fftSize = 512; src.connect(an);
+    }
     const data = new Uint8Array(an.fftSize), hist = new Array(bars.length).fill(0);
     let last = 0;
     const loop = t => {
@@ -712,7 +828,7 @@ function rawMime(blob){
   if(/^(audio|video)\//.test(t)) return t === "audio/x-m4a" ? "audio/mp4" : t;
   return EXT_MIME[extOf(blob.name)] || "";
 }
-async function decodeToMono(blob){
+async function decodeAudio(blob){
   const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
   if(!OAC) throw new Error("no-audio-api");
   let audio = null, lastErr = null;
@@ -728,14 +844,9 @@ async function decodeToMono(blob){
     }catch(e){ lastErr = e; }
   }
   if(!audio) throw lastErr || new Error("decode");
-  const n = audio.length, ch = audio.numberOfChannels;
-  let pcm;
-  if(ch === 1) pcm = audio.getChannelData(0);
-  else{
-    pcm = new Float32Array(n);
-    for(let c = 0; c < ch; c++){ const d = audio.getChannelData(c); for(let i = 0; i < n; i++) pcm[i] += d[i] / ch; }
-  }
-  return {pcm, sr: audio.sampleRate};
+  const chs = [];
+  for(let c = 0; c < Math.min(audio.numberOfChannels, 4); c++) chs.push(audio.getChannelData(c));
+  return {chs, sr: audio.sampleRate};
 }
 function splitPcm(pcm, sr, maxSec){
   const parts = []; let start = 0;
@@ -773,22 +884,253 @@ function blobToB64(blob){
     r.readAsDataURL(blob);
   });
 }
-/* Turns any audio into ≤3-minute WAV parts, split at quiet moments. */
-async function audioToParts(blob){
+/* Turns any audio into short WAV parts, split at quiet moments. */
+async function audioToParts(blob, maxSec, onStage){
   let dec;
-  try{ dec = await decodeToMono(blob); }
+  try{ dec = await decodeAudio(blob); }
   catch(e){
     // This browser can't read the format: send the original file if it is small enough.
     const mime = rawMime(blob);
     if(mime && blob.size <= 14 * 1048576) return {parts: [{blob, mime}], duration: null};
     throw new Error("This browser can't read this audio file. Open the app in Chrome, or convert the file to MP3.");
   }
-  const {pcm, sr} = dec;
+  const {chs, sr} = dec;
+  let pcm = chs[0], spatial = false;
+  if(chs.length >= 2 && store.get("multimic", "1") === "1"){
+    onStage && onStage("Combining the 2 microphones…");
+    const r = await spatialCombine(chs[0], chs[1], sr);
+    pcm = r.mono; spatial = r.spatial;
+  }else if(chs.length >= 2) pcm = mixMono(chs);
   if(pcm.length < sr * 0.4) throw new Error("The recording is too short. Speak a little longer.");
-  let peak = 0; for(let i = 0; i < pcm.length; i += 4){ const a = Math.abs(pcm[i]); if(a > peak) peak = a; }
-  if(peak < 0.01) throw new Error("No sound was found. Check your microphone or the file.");
-  const gain = Math.min(8, 0.9 / peak);
-  return {parts: splitPcm(pcm, sr, 180).map(p => ({pcm: p, sr, gain})), duration: pcm.length / sr};
+  let peak = 0; for(let i = 0; i < pcm.length; i += 2){ const a = Math.abs(pcm[i]); if(a > peak) peak = a; }
+  if(peak < 0.0008) throw new Error("No sound was found. Check your microphone or the file.");
+  const gain = Math.min(40, 0.9 / peak);
+  return {parts: splitPcm(pcm, sr, maxSec).map(p => ({pcm: p, sr, gain})), duration: pcm.length / sr, pcm, sr, gain, spatial};
+}
+
+/* ---------- voice cleanup (runs in the browser before the AI hears it) ----------
+   1. filters: rumble/hum removal, less boom on deep voices, more consonant clarity
+   2. spectral noise reduction (learns the background noise from the quiet moments)
+   3. speech leveller: lifts quiet or distant speech without pumping up the silence */
+const cleanupLevel = () => store.get("cleanup", "normal");
+const yieldUI = () => new Promise(r => setTimeout(r, 0));
+function biquad(x, type, f, sr, q, db){
+  const A = Math.pow(10, (db || 0) / 40), w0 = 2 * Math.PI * f / sr, cw = Math.cos(w0), al = Math.sin(w0) / (2 * q);
+  let b0, b1, b2, a0, a1, a2;
+  if(type === "hp"){ b0 = (1 + cw) / 2; b1 = -(1 + cw); b2 = b0; a0 = 1 + al; a1 = -2 * cw; a2 = 1 - al; }
+  else if(type === "lp"){ b0 = (1 - cw) / 2; b1 = 1 - cw; b2 = b0; a0 = 1 + al; a1 = -2 * cw; a2 = 1 - al; }
+  else if(type === "notch"){ b0 = 1; b1 = -2 * cw; b2 = 1; a0 = 1 + al; a1 = -2 * cw; a2 = 1 - al; }
+  else { b0 = 1 + al * A; b1 = -2 * cw; b2 = 1 - al * A; a0 = 1 + al / A; a1 = -2 * cw; a2 = 1 - al / A; }
+  b0 /= a0; b1 /= a0; b2 /= a0; a1 /= a0; a2 /= a0;
+  let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+  for(let i = 0; i < x.length; i++){
+    const xi = x[i], y = b0 * xi + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+    x2 = x1; x1 = xi; y2 = y1; y1 = y; x[i] = y;
+  }
+}
+const fftCache = {};
+function getFFT(n){
+  if(fftCache[n]) return fftCache[n];
+  const bits = Math.log2(n), rev = new Uint32Array(n), cos = new Float64Array(n / 2), sin = new Float64Array(n / 2);
+  for(let i = 0; i < n; i++){ let r = 0; for(let b = 0; b < bits; b++) r |= ((i >> b) & 1) << (bits - 1 - b); rev[i] = r; }
+  for(let i = 0; i < n / 2; i++){ cos[i] = Math.cos(2 * Math.PI * i / n); sin[i] = Math.sin(2 * Math.PI * i / n); }
+  return fftCache[n] = (re, im, inv) => {
+    for(let i = 0; i < n; i++){ const j = rev[i]; if(j > i){ let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; } }
+    for(let size = 2; size <= n; size <<= 1){
+      const half = size >> 1, step = n / size;
+      for(let i = 0; i < n; i += size){
+        for(let j = 0, k = 0; j < half; j++, k += step){
+          const wr = cos[k], wi = inv ? sin[k] : -sin[k], a = i + j, b = a + half;
+          const tr = re[b] * wr - im[b] * wi, ti = re[b] * wi + im[b] * wr;
+          re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
+        }
+      }
+    }
+    if(inv) for(let i = 0; i < n; i++){ re[i] /= n; im[i] /= n; }
+  };
+}
+async function denoise(x, strong){
+  const N = 512, H = 128, B = N / 2 + 1, L = x.length, fft = getFFT(N);
+  const over = strong ? 1.6 : 1.1, floor = strong ? 0.1 : 0.18;
+  const win = new Float32Array(N);
+  for(let i = 0; i < N; i++) win[i] = Math.sqrt(0.5 - 0.5 * Math.cos(2 * Math.PI * i / N));
+  const buf = new Float32Array(L + 2 * N); buf.set(x, N);
+  const F = Math.floor((L + N) / H) + 1;
+  const re = new Float64Array(N), im = new Float64Array(N);
+  const frame = f => { const o = f * H; for(let i = 0; i < N; i++){ re[i] = (buf[o + i] || 0) * win[i]; im[i] = 0; } fft(re, im, false); };
+  // 1) learn the background noise: 10th percentile of each frequency's power
+  const stride = Math.max(1, Math.floor(F / 2500)), samples = [];
+  for(let k = 0; k < B; k++) samples.push([]);
+  for(let f = 0; f < F; f += stride){
+    frame(f);
+    for(let k = 0; k < B; k++) samples[k].push(re[k] * re[k] + im[k] * im[k]);
+    if(f % (stride * 600) === 0) await yieldUI();
+  }
+  const noise = new Float64Array(B);
+  for(let k = 0; k < B; k++){
+    // low percentile of a noisy power reading under-reads the true average; correct for it (minimum statistics),
+    // but never above the median, so steady speech is not mistaken for noise
+    const s = samples[k].sort((a, b) => a - b);
+    noise[k] = Math.min((s[Math.floor(s.length * 0.15)] || 0) / 0.1625, (s[Math.floor(s.length * 0.5)] || 0) / 0.693);
+  }
+  // 2) remove it, frame by frame, with smoothing to avoid "watery" artefacts
+  const out = new Float32Array(buf.length), g = new Float64Array(B), prev = new Float64Array(B).fill(1), sm = new Float64Array(B);
+  for(let f = 0; f < F; f++){
+    frame(f);
+    for(let k = 0; k < B; k++){
+      const p = re[k] * re[k] + im[k] * im[k] + 1e-12;
+      g[k] = Math.sqrt(Math.max(floor * floor, 1 - over * noise[k] / p));
+    }
+    for(let k = 0; k < B; k++){
+      let v = (g[Math.max(0, k - 1)] + 2 * g[k] + g[Math.min(B - 1, k + 1)]) / 4;
+      if(v < prev[k]) v = prev[k] * 0.55 + v * 0.45;   // let gain fall gently, rise at once
+      sm[k] = prev[k] = v;
+    }
+    for(let k = 0; k < B; k++){
+      re[k] *= sm[k]; im[k] *= sm[k];
+      if(k > 0 && k < N / 2){ re[N - k] = re[k]; im[N - k] = -im[k]; }
+    }
+    fft(re, im, true);
+    const o = f * H;
+    for(let i = 0; i < N; i++) if(o + i < out.length) out[o + i] += re[i] * win[i];
+    if(f % 2000 === 0) await yieldUI();
+  }
+  const y = new Float32Array(L);
+  for(let i = 0; i < L; i++) y[i] = out[N + i] / 2;   // sqrt-Hann, 75% overlap → sum of 2
+  return y;
+}
+function levelVoice(x, sr, maxDb){
+  const fl = Math.round(sr * 0.05), n = Math.ceil(x.length / fl);
+  if(n < 2) return;
+  const rms = new Float32Array(n);
+  for(let f = 0; f < n; f++){
+    let s = 0, c = 0;
+    for(let i = f * fl; i < Math.min(x.length, (f + 1) * fl); i++){ s += x[i] * x[i]; c++; }
+    rms[f] = Math.sqrt(s / Math.max(1, c));
+  }
+  const sorted = Float32Array.from(rms).sort();
+  const thr = Math.max((sorted[Math.floor(n * 0.2)] || 1e-5) * 2.5, 0.0004);
+  const target = 0.1, maxG = Math.pow(10, maxDb / 20);
+  const g = new Float32Array(n);
+  let cur = 1, started = false;
+  for(let f = 0; f < n; f++){
+    let want = cur;
+    if(rms[f] > thr){
+      want = Math.min(maxG, Math.max(0.3, target / rms[f]));
+      if(!started){ cur = want; started = true; }
+    }
+    cur += (want - cur) * (want < cur ? 0.5 : 0.08);   // drop fast, rise slowly; hold in pauses
+    g[f] = cur;
+  }
+  for(let i = 0; i < x.length; i++){
+    const p = i / fl - 0.5, f0 = Math.max(0, Math.min(n - 1, Math.floor(p))), f1 = Math.min(n - 1, f0 + 1);
+    const t = Math.min(1, Math.max(0, p - f0));
+    let v = x[i] * (g[f0] + (g[f1] - g[f0]) * t);
+    const a = Math.abs(v);
+    if(a > 0.8) v = Math.sign(v) * (0.8 + 0.19 * Math.tanh((a - 0.8) / 0.19));   // soft limiter
+    x[i] = v;
+  }
+}
+async function enhanceVoice(pcm, sr, lvl){
+  const strong = lvl === "strong";
+  const x = Float32Array.from(pcm);
+  biquad(x, "hp", 80, sr, 0.707); biquad(x, "hp", 80, sr, 0.707);          // rumble, wind, handling noise
+  for(const f of [50, 100, 150]) biquad(x, "notch", f, sr, 25);              // 50 Hz mains hum
+  biquad(x, "peak", 230, sr, 1.0, strong ? -4 : -2.5);                       // less boom on deep voices
+  biquad(x, "peak", 3000, sr, 0.8, strong ? 6 : 4);                          // consonant clarity
+  if(sr > 16000) biquad(x, "lp", 7600, sr, 0.707);
+  await yieldUI();
+  const y = await denoise(x, strong);
+  levelVoice(y, sr, strong ? 32 : 22);
+  return y;
+}
+
+/* ---------- multi-microphone (2-channel) processing ----------
+   1. align the two mics (time difference of the voice between them)
+   2. weight the cleaner mic more (maximum-ratio combining)
+   3. keep sound that is the same in both mics (the speaker), reduce sound that differs (diffuse room/site noise) */
+function mixMono(chs){
+  if(chs.length === 1) return chs[0];
+  const n = chs[0].length, out = new Float32Array(n);
+  for(const c of chs) for(let i = 0; i < n; i++) out[i] += c[i] / chs.length;
+  return out;
+}
+function frameRmsPercentiles(x, sr){
+  const fl = Math.round(sr * 0.03), v = [];
+  for(let o = 0; o + fl <= x.length; o += fl){ let s = 0; for(let i = o; i < o + fl; i++) s += x[i] * x[i]; v.push(Math.sqrt(s / fl)); }
+  v.sort((a, b) => a - b);
+  return {lo: v[Math.floor(v.length * 0.15)] || 1e-6, hi: v[Math.floor(v.length * 0.9)] || 1e-6};
+}
+async function spatialCombine(c1, c2, sr, extra = []){
+  const L = Math.min(c1.length, c2.length);
+  let e1 = 0, e2 = 0, ed = 0;
+  for(let i = 0; i < L; i += 3){ e1 += c1[i] * c1[i]; e2 += c2[i] * c2[i]; const d = c1[i] - c2[i]; ed += d * d; }
+  if(e1 < 1e-5 * e2) return {mono: c2, spatial: false, why: "left silent"};
+  if(e2 < 1e-5 * e1) return {mono: c1, spatial: false, why: "right silent"};
+  if(ed < 1e-4 * (e1 + e2)) return {mono: mixMono([c1, c2]), spatial: false, why: "same signal"};
+  // 1) delay between mics: cross-correlation of high-passed loud frames, ±1.2 ms
+  const h1 = Float32Array.from(c1.subarray(0, L)), h2 = Float32Array.from(c2.subarray(0, L));
+  for(const h of [h1, h2]){ biquad(h, "hp", 500, sr, 0.707); biquad(h, "hp", 500, sr, 0.707); }
+  const fl = Math.round(sr * 0.03), en = [];
+  for(let o = 0; o + fl <= L; o += fl){ let s = 0; for(let i = o; i < o + fl; i++) s += h1[i] * h1[i] + h2[i] * h2[i]; en.push([s, o]); }
+  en.sort((a, b) => b[0] - a[0]);
+  const loud = en.slice(0, Math.min(en.length, 700)).map(e => e[1]);
+  const maxLag = Math.max(1, Math.round(sr * 0.0012));
+  let bestLag = 0, best = -Infinity;
+  for(let d = -maxLag; d <= maxLag; d++){
+    let s = 0, n1 = 0, n2 = 0;
+    for(const o of loud) for(let i = o; i < o + fl; i++){ const j = i + d; if(j < 0 || j >= L) continue; s += h1[i] * h2[j]; n1 += h1[i] * h1[i]; n2 += h2[j] * h2[j]; }
+    const r = s / Math.sqrt(n1 * n2 + 1e-20);
+    if(r > best){ best = r; bestLag = d; }
+  }
+  await yieldUI();
+  // 2) weights from each mic's voice level and noise floor
+  const p1 = frameRmsPercentiles(c1, sr), p2 = frameRmsPercentiles(c2, sr);
+  const s1 = Math.max(1e-6, p1.hi - p1.lo), s2 = Math.max(1e-6, p2.hi - p2.lo);
+  let w1 = s1 / (p1.lo * p1.lo), w2 = s2 / (p2.lo * p2.lo);
+  const ws = w1 + w2; w1 /= ws; w2 /= ws;
+  // 3) STFT: weighted sum of aligned mics × coherence mask above 1 kHz
+  const N = 512, H = 128, B = N / 2 + 1, fft = getFFT(N), kMin = Math.ceil(1000 / (sr / N));
+  const win = new Float32Array(N);
+  for(let i = 0; i < N; i++) win[i] = Math.sqrt(0.5 - 0.5 * Math.cos(2 * Math.PI * i / N));
+  const sets = [[c1, c2], ...extra];
+  const pads = sets.map(([a, b]) => {
+    const pa = new Float32Array(L + 2 * N), pb = new Float32Array(L + 2 * N);
+    pa.set(a.subarray(0, L), N);
+    for(let i = 0; i < L; i++){ const j = i + bestLag; pb[N + i] = j >= 0 && j < L ? b[j] : 0; }
+    return [pa, pb, new Float32Array(L + 2 * N)];
+  });
+  const F = Math.floor((L + N) / H) + 1;
+  const r1 = new Float64Array(N), i1 = new Float64Array(N), r2 = new Float64Array(N), i2 = new Float64Array(N);
+  const P11 = new Float64Array(B), P22 = new Float64Array(B), P12r = new Float64Array(B), P12i = new Float64Array(B), G = new Float64Array(B);
+  const a = 0.7;
+  for(let f = 0; f < F; f++){
+    const o = f * H;
+    for(let si = 0; si < pads.length; si++){
+      const [pa, pb, out] = pads[si];
+      for(let i = 0; i < N; i++){ r1[i] = pa[o + i] * win[i]; i1[i] = 0; r2[i] = pb[o + i] * win[i]; i2[i] = 0; }
+      fft(r1, i1, false); fft(r2, i2, false);
+      if(si === 0){
+        for(let k = 0; k < B; k++){
+          P11[k] = a * P11[k] + (1 - a) * (r1[k] * r1[k] + i1[k] * i1[k]);
+          P22[k] = a * P22[k] + (1 - a) * (r2[k] * r2[k] + i2[k] * i2[k]);
+          P12r[k] = a * P12r[k] + (1 - a) * (r1[k] * r2[k] + i1[k] * i2[k]);
+          P12i[k] = a * P12i[k] + (1 - a) * (i1[k] * r2[k] - r1[k] * i2[k]);
+          const coh = (P12r[k] * P12r[k] + P12i[k] * P12i[k]) / (P11[k] * P22[k] + 1e-20);
+          G[k] = k < kMin ? 1 : Math.max(0.3, Math.min(1, coh));
+        }
+      }
+      for(let k = 0; k < B; k++){
+        r1[k] = (w1 * r1[k] + w2 * r2[k]) * G[k]; i1[k] = (w1 * i1[k] + w2 * i2[k]) * G[k];
+        if(k > 0 && k < N / 2){ r1[N - k] = r1[k]; i1[N - k] = -i1[k]; }
+      }
+      fft(r1, i1, true);
+      for(let i = 0; i < N; i++) if(o + i < out.length) out[o + i] += r1[i] * win[i];
+    }
+    if(f % 1500 === 0) await yieldUI();
+  }
+  const res = pads.map(([, , out]) => { const y = new Float32Array(L); for(let i = 0; i < L; i++) y[i] = out[N + i] / 2; return y; });
+  return {mono: res[0], extra: res.slice(1), spatial: true, lag: bestLag, w: [w1, w2]};
 }
 
 /* ---------- main audio → text pipeline (recordings and files) ---------- */
@@ -799,31 +1141,33 @@ async function processAudio(blob, opts = {}){
     return;
   }
   const from = langSel.value, to = targetOf(from), out = outMode();
-  const st = {parts: null, idx: 0, pos: null, from, to, out, name: opts.name || ""};
+  const lvl = cleanupLevel(), best = store.get("accuracy", "fast") === "best";
+  const st = {parts: null, idx: 0, pos: null, from, to, out, lvl, best, name: opts.name || "", tail: "", any: false};
   const go = () => runJob(opts.kind === "file" ? "Reading the file…" : "Preparing audio…", async signal => {
     holdWake();
     try{
       if(!st.parts){
-        const r = await audioToParts(blob);
-        st.parts = r.parts;
-        st.info = st.name ? st.name + (r.duration ? " · " + fmtDur(r.duration) : "") : "";
+        // with "Best", two versions of the audio go in each request, so parts are shorter
+        const r = await audioToParts(blob, best && lvl !== "off" ? 120 : 180, t => setBusy(t));
+        Object.assign(st, {parts: r.parts, pcm: r.pcm, sr: r.sr, gain: r.gain, duration: r.duration, spatial: r.spatial});
+        st.info = [st.name, r.duration ? fmtDur(r.duration) : "", r.spatial ? "2 mics combined" : ""].filter(Boolean).join(" · ");
       }
       const n = st.parts.length;
       for(; st.idx < n; st.idx++){
         if(signal.aborted) throw abortErr();
-        const what = out === "target" ? `Translating to ${LANG_NAME[to]}` : "AI is writing";
-        setBusy(n > 1 ? `${what} · part ${st.idx + 1} of ${n}…` : `${what}…`,
-          (st.info ? st.info + ". " : "") + "Keep this screen open.");
+        st.label = t => setBusy((n > 1 ? `Part ${st.idx + 1} of ${n} · ` : "") + t, (st.info ? st.info + ". " : "") + "Keep this screen open.");
         const text = await partToText(st.parts[st.idx], st, signal);
         if(text){
           if(st.pos !== null && st.pos <= ed.value.length) ed.selectionStart = ed.selectionEnd = st.pos;
-          const r = insertText(text, false, n > 1);
+          const r = insertText(text, false, n > 1 || st.many);
           st.pos = r.start + r.text.length;
           st.any = true;
+          st.tail = text.slice(-400);
         }
       }
       if(!st.any) toast("No speech was found in the audio.");
       else if(n > 1) toast(`Done. ${n} parts written.`);
+      if(st.any && st.parts.every(p => p.enh) && st.duration <= 20 * 60 && (opts.kind === "file" || lvl === "strong" || st.spatial)) showAudioCompare(st);
     }catch(e){
       if(e.name !== "AbortError" && st.parts){
         const left = st.parts.length - st.idx;
@@ -837,13 +1181,26 @@ async function processAudio(blob, opts = {}){
   });
   return go();
 }
+const wavPart = (pcm, sr, gain) => blobToB64(encodeWav(pcm, sr, gain)).then(data => ({inline_data: {mime_type: "audio/wav", data}}));
 async function partToText(part, st, signal){
-  const audio = part.blob
-    ? {inline_data: {mime_type: part.mime, data: await blobToB64(part.blob)}}
-    : {inline_data: {mime_type: "audio/wav", data: await blobToB64(encodeWav(part.pcm, part.sr, part.gain))}};
-  if(st.out === "target") return gem([{text: audioPrompt("translate", st.from, st.to)}, audio], signal);
-  const t = await gem([{text: audioPrompt("transcribe", st.from)}, audio], signal);
+  st.many = store.get("speakers", "one") === "many";
+  let audio = [], two = false;
+  if(part.blob){
+    audio = [{inline_data: {mime_type: part.mime, data: await blobToB64(part.blob)}}];
+  }else if(st.lvl !== "off"){
+    if(!part.enh){ st.label("Cleaning the voice…"); part.enh = await enhanceVoice(part.pcm, part.sr, st.lvl); }
+    audio = [await wavPart(part.enh, part.sr, 1)];
+    if(st.best){ audio.push(await wavPart(part.pcm, part.sr, part.gain)); two = true; }
+  }else{
+    audio = [await wavPart(part.pcm, part.sr, part.gain)];
+  }
+  const what = st.out === "target" ? `Translating to ${LANG_NAME[st.to]}…` : (st.best ? "AI is listening carefully…" : "AI is writing…");
+  st.label(what);
+  const ctx = {two, tail: st.tail, many: st.many};
+  if(st.out === "target") return gem([{text: audioPrompt("translate", st.from, st.to, ctx)}, ...audio], signal, {best: st.best});
+  const t = await gem([{text: audioPrompt("transcribe", st.from, null, ctx)}, ...audio], signal, {best: st.best});
   if(st.out === "both" && t){
+    st.label(`Translating to ${LANG_NAME[st.to]}…`);
     const tr = await translateText(t, st.from, st.to, signal);
     return tr ? t + "\n\n" + tr : t;
   }
@@ -859,23 +1216,40 @@ function styleLine(to){
   if(to === "en-US") return formal ? "Use formal, professional English suitable for business emails, letters and reports." : "Use natural, clear everyday English.";
   return formal ? "Use formal written Sinhala suitable for official letters, in Sinhala Unicode script." : "Use natural, clear written Sinhala in Sinhala Unicode script.";
 }
-function audioPrompt(kind, from, to){
+/* Shared guidance for hard audio, speakers, topic and the text that came just before. */
+function listeningLines(ctx){
+  const topic = store.get("topic", "").trim();
+  const names = store.get("spkNames", "").split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+  const mark = store.get("markUnclear", "0") === "1";
+  return [
+    ctx.two ? "You are given two versions of the same recording: first a cleaned version (noise removed, voice boosted), then the original. Use both to work out what was said. The cleaned one is usually clearer; check the original where the cleaned one sounds distorted. Write the result only once." : "",
+    "The audio may be quiet, muffled, distant, low-pitched or noisy (site noise, vehicles, fans, phone calls). Listen carefully and use the meaning of the sentence to recover unclear words.",
+    mark ? "- If a word truly cannot be heard, write [?] in its place instead of guessing." : "- If a word is unclear, write the most likely word from the context.",
+    topic ? `- Context: this recording is about: ${topic}. Prefer words that fit this topic.` : "",
+    ctx.many ? "- Several people may speak. Start each speaker's turn on a new line with a label followed by a colon, like \"Speaker 1: ...\". Give the same voice the same label every time. Keep the labels in English." : "",
+    ctx.many && names.length ? `- The speakers may include: ${names.join(", ")}. Use a name as the label only when it is clear who is speaking (for example, someone is addressed by name); otherwise use Speaker 1, Speaker 2.` : "",
+    ctx.tail ? `- This audio continues an earlier part. The earlier part ended with: """${ctx.tail}""". Continue naturally from there${ctx.many ? " and keep the same speaker labels" : ""}. Do not repeat that earlier text.` : ""
+  ];
+}
+function audioPrompt(kind, from, to, ctx = {}){
   const name = LANG_NAME[from];
   const v = vocabList();
   const vocab = v.length ? `- These words may appear; spell them exactly like this: ${v.join(", ")}` : "";
+  const listen = listeningLines(ctx);
   if(kind === "translate"){
     return [
       `Listen to this recording. The speaker is speaking ${name}, possibly mixed with English words.`,
       `Translate everything that is said into ${LANG_NAME[to]}.`,
+      listen[0], listen[1],
       "Rules:",
       "- " + styleLine(to),
       "- Translate the full content. Do not summarise or skip anything.",
       "- Keep names, brand names, technical terms and units accurate. Write numbers as digits.",
       "- Leave out filler sounds, stutters and false starts.",
-      "- Start a new paragraph when the topic changes.",
-      `- Do not include the ${name} text. Do not add notes, headings, labels, quotes or timestamps.`,
+      ctx.many ? "" : "- Start a new paragraph when the topic changes.",
+      `- Do not include the ${name} text. Do not add notes, headings, quotes or timestamps.`,
       "- If there is no clear speech, return an empty response.",
-      vocab,
+      ...listen.slice(2), vocab,
       `Return only the ${LANG_NAME[to]} translation.`
     ].filter(Boolean).join("\n");
   }
@@ -884,31 +1258,35 @@ function audioPrompt(kind, from, to){
     : from === "ta-LK" ? "correct Tamil Unicode script with correct spelling" : "correct English spelling";
   return [
     `Transcribe this audio recording. The speaker is speaking ${name}${from === "en-US" ? "" : " (Sri Lanka)"}, possibly mixed with English words.`,
+    listen[0], listen[1],
     "Rules:",
     `- Write the speech in ${script}.`,
     from !== "en-US" ? "- Write English words (technical terms, brand names, units, acronyms) in English letters, exactly as spoken." : "",
     "- Write numbers, amounts and measurements as digits.",
-    "- Add natural punctuation (full stops, commas, question marks) and start a new paragraph when the topic changes.",
+    "- Add natural punctuation (full stops, commas, question marks)" + (ctx.many ? "." : " and start a new paragraph when the topic changes."),
     clean ? "- Remove filler sounds, stutters, repeated words and false starts. When the speaker corrects themselves, keep only the corrected version. Keep the speaker's own words otherwise."
           : "- Write exactly what was said, word for word, including repeated words.",
-    "- Do not translate. Do not summarise. Do not add commentary, headings, labels, quotes or timestamps.",
+    "- Do not translate. Do not summarise. Do not add commentary, headings, quotes or timestamps.",
     "- If there is no clear speech, return an empty response.",
-    vocab,
+    ...listen.slice(2), vocab,
     "Return only the transcript text."
   ].filter(Boolean).join("\n");
 }
 async function translateText(text, from, to, signal){
   const v = vocabList();
+  const topic = store.get("topic", "").trim();
   const prompt = [
     `Translate the following ${LANG_NAME[from]} text into ${LANG_NAME[to]}.`,
     "- " + styleLine(to),
     "- Keep the meaning exactly. Do not add, drop or summarise anything.",
     "- Keep names, brand names, technical terms, units and numbers as they are. Write numbers as digits.",
     "- Keep the paragraph breaks and lists.",
+    "- Keep speaker labels at the start of lines (like \"Speaker 1:\" or a name followed by a colon) exactly as they are.",
+    topic ? `- Context: the text is about: ${topic}.` : "",
     v.length ? "- Spell these terms exactly like this: " + v.join(", ") : "",
-    "- Return only the translation, with no notes, labels or quotes.",
-    "", "TEXT:", text
-  ].filter((x, i) => x !== "" || i > 5).join("\n");
+    "- Return only the translation, with no notes or quotes.",
+    "\nTEXT:", text
+  ].filter(Boolean).join("\n");
   return gem([{text: prompt}], signal);
 }
 
@@ -942,16 +1320,31 @@ async function gemCall(model, body, signal){
   }
   return (cand.content?.parts || []).filter(p => p.text && !p.thought).map(p => p.text).join("").trim();
 }
-async function gem(parts, signal){
-  const model = store.get("model", "gemini-flash-latest");
-  const tc = thinkingConfig(model);
+function bestModel(){
+  let list = [];
+  try{ list = JSON.parse(store.get("models", "[]")); }catch(e){}
+  return list.find(n => /pro/.test(n) && !/preview|exp/.test(n)) || list.find(n => /pro/.test(n)) || "";
+}
+let bestNoted = false, bestBlocked = false;
+async function gem(parts, signal, opts = {}){
+  const normal = store.get("model", "gemini-flash-latest");
+  let model = (opts.best && !bestBlocked && bestModel()) || normal;
+  // "Best" lets the model think freely; normal calls keep thinking low for speed
+  const cfg = m => (m === normal || !opts.best) ? thinkingConfig(m) : null;
   const body = {contents:[{role:"user", parts}]};
-  if(tc) body.generationConfig = {thinkingConfig: tc};
+  const setCfg = m => { const tc = cfg(m); if(tc) body.generationConfig = {thinkingConfig: tc}; else delete body.generationConfig; };
+  setCfg(model);
   for(let attempt = 0; ; attempt++){
     try{ return await gemCall(model, body, signal); }
     catch(e){
       if(e.name === "AbortError") throw e;
       if(body.generationConfig && e.status === 400 && /think/i.test(e.raw || "")){ delete body.generationConfig; attempt--; continue; }
+      // the strongest model may not be on the free plan: fall back to the normal one
+      if(model !== normal && [403, 404, 429].includes(e.status) && !/key/i.test(e.raw || "")){
+        model = normal; setCfg(model); attempt--; bestBlocked = true;
+        if(!bestNoted){ bestNoted = true; toast(`${bestModel()} isn't available on your key right now. Using ${normal}.`); }
+        continue;
+      }
       const retryable = e.status === 429 || e.status >= 500;
       if(!retryable || attempt >= 3) throw e;
       const label = busyLabel;
@@ -1051,6 +1444,31 @@ $("#transReplace").onclick = () => {
   closeTranslation();
   toast("Original replaced with the translation.", {action:{label:"Undo", fn: undo}});
 };
+
+/* ---------- before / after audio ---------- */
+let abUrls = [], abClean = null, abName = "";
+function showAudioCompare(st){
+  abUrls.forEach(u => URL.revokeObjectURL(u));
+  const total = st.parts.reduce((n, p) => n + p.enh.length, 0);
+  const clean = new Float32Array(total);
+  let o = 0; for(const p of st.parts){ clean.set(p.enh, o); o += p.enh.length; }
+  const origUrl = URL.createObjectURL(encodeWav(st.pcm, st.sr, st.gain));
+  abClean = encodeWav(clean, st.sr, 1);
+  const cleanUrl = URL.createObjectURL(abClean);
+  abUrls = [origUrl, cleanUrl];
+  abName = (st.name || "recording").replace(/\.[^.]+$/, "") + "-clean.wav";
+  $("#abOrig").src = origUrl; $("#abClean").src = cleanUrl;
+  $("#abInfo").textContent = [cleanupLevel() === "strong" ? "Strong cleanup" : "Normal cleanup", st.spatial ? "2 microphones combined" : ""].filter(Boolean).join(" · ");
+  $("#audioPanel").hidden = false;
+}
+$("#abClose").onclick = () => { $("#audioPanel").hidden = true; ["#abOrig", "#abClean"].forEach(q => { $(q).pause(); }); };
+$("#abSave").onclick = () => {
+  if(!abClean) return;
+  const url = URL.createObjectURL(abClean);
+  const a = document.createElement("a"); a.href = url; a.download = abName; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+};
+["#abOrig", "#abClean"].forEach((q, i, all) => $(q).addEventListener("play", () => $(all[1 - i]).pause()));
 
 /* ---------- audio file upload, drag & drop, share ---------- */
 const fileIn = $("#fileIn");
@@ -1169,7 +1587,7 @@ $("#testKey").onclick = async () => {
   renderModeInfo();
 };
 $("#model").onchange = e => store.set("model", e.target.value);
-for(const [name, key, def] of [["style", "style", "clean"], ["tstyle", "tstyle", "natural"]]){
+for(const [name, key, def] of [["style", "style", "clean"], ["tstyle", "tstyle", "natural"], ["cleanup", "cleanup", "normal"], ["accuracy", "accuracy", "fast"], ["speakers", "speakers", "one"]]){
   document.querySelectorAll(`input[name="${name}"]`).forEach(r => {
     r.checked = r.value === store.get(key, def);
     r.onchange = () => store.set(key, r.value);
@@ -1177,8 +1595,11 @@ for(const [name, key, def] of [["style", "style", "clean"], ["tstyle", "tstyle",
 }
 $("#vocab").value = store.get("vocab", "");
 $("#vocab").addEventListener("input", e => store.set("vocab", e.target.value));
-$("#autoDot").checked = store.get("autoDot", "0") === "1";
-$("#autoDot").onchange = e => store.set("autoDot", e.target.checked ? "1" : "0");
+const CHECKS = {autoDot: ["autoDot", "0"], multiMic: ["multimic", "1"], liveBoost: ["liveBoost", isAndroid ? "0" : "1"], markUnclear: ["markUnclear", "0"]};
+function syncChecks(){ for(const [id, [key, def]] of Object.entries(CHECKS)) $("#" + id).checked = store.get(key, def) === "1"; }
+for(const [id, [key]] of Object.entries(CHECKS)) $("#" + id).onchange = e => store.set(key, e.target.checked ? "1" : "0");
+syncChecks();
+for(const id of ["topic", "spkNames"]){ $("#" + id).value = store.get(id, ""); $("#" + id).addEventListener("input", e => store.set(id, e.target.value)); }
 function applyTheme(t){ if(t) document.documentElement.setAttribute("data-theme", t); else document.documentElement.removeAttribute("data-theme"); }
 applyTheme(store.get("theme", ""));
 document.querySelectorAll("[data-theme-set]").forEach(b => b.onclick = () => { store.set("theme", b.dataset.themeSet); applyTheme(b.dataset.themeSet); });
