@@ -4,6 +4,10 @@ Speak in Sinhala, Tamil or English and get clean text.
 
 - **Live mode** (free): text appears while you speak. Uses Chrome's built-in Google speech engine.
 - **AI accurate mode**: record, tap stop, and Gemini writes the text with correct Sinhala spelling and punctuation. Needs a free Gemini API key.
+- **Write as**: get the text as spoken, as an English translation, or both (Sinhala paragraph, then English).
+- **Translate button**: translates the selected text (or all text) Sinhala ↔ English. Then copy it, add it below the original, or replace the original.
+- **Audio files**: tap the file button (or drag a file onto the page) to turn a voice note, MP3, M4A, WAV, OGG/OPUS or video into text. Long files (up to about an hour) are split at pauses and written part by part.
+- **Share from WhatsApp (Android)**: once installed, long-press a voice note → Share → කතා ලියන. Shared text can also be sent to the app and translated.
 
 ## Files
 
@@ -36,7 +40,13 @@ Speak in Sinhala, Tamil or English and get clean text.
 
 The key is stored only in the browser on that device.
 
+## Tips
+
+- Set **Spoken** to the language in the audio. Set **Write as** before you record or upload.
+- Translation style (Natural or Formal) and your special words list are in Settings.
+- Very long files use more of your free Gemini quota. If the limit is reached, the app waits and retries. If it still fails, tap **Retry** and it continues from the part where it stopped.
+
 ## Updating the app
 
-After changing any file, open `sw.js` and change `VERSION` (for example `katha-v1` → `katha-v2`),
+After changing any file, open `sw.js` and change `VERSION` (for example `katha-v2` → `katha-v3`),
 then upload. Phones get the new version the next time the app is opened.

@@ -1,6 +1,7 @@
 /* Katha Liyana service worker.
    Change VERSION whenever you upload new files, so phones pick up the update. */
-const VERSION = "katha-v1";
+const VERSION = "katha-v2";
+const SHARE_CACHE = "katha-share";
 const SHELL = [
   "./",
   "./index.html",
@@ -23,15 +24,43 @@ self.addEventListener("install", event => {
 self.addEventListener("activate", event => {
   event.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== VERSION && k !== FONT_CACHE).map(k => caches.delete(k))))
+      .then(keys => Promise.all(keys.filter(k => k !== VERSION && k !== FONT_CACHE && k !== SHARE_CACHE).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
 
 self.addEventListener("fetch", event => {
   const req = event.request;
-  if (req.method !== "GET") return;
   const url = new URL(req.url);
+
+  // A voice note or text shared to the app from the phone's share menu (Android).
+  // Keep it for the page, then open the app, which picks it up.
+  if (req.method === "POST" && url.origin === location.origin && url.pathname.endsWith("/share-target")) {
+    event.respondWith((async () => {
+      const scope = self.registration.scope;
+      try {
+        const form = await req.formData();
+        const cache = await caches.open(SHARE_CACHE);
+        const file = form.get("audio");
+        if (file && typeof file !== "string" && file.size) {
+          await cache.put(new URL("shared-audio", scope).href, new Response(file, {
+            headers: {
+              "Content-Type": file.type || "application/octet-stream",
+              "X-File-Name": encodeURIComponent(file.name || "Voice note")
+            }
+          }));
+        } else {
+          const parts = [form.get("title"), form.get("text")].filter(v => typeof v === "string" && v.trim());
+          const text = [...new Set(parts.map(v => v.trim()))].join("\n");
+          if (text) await cache.put(new URL("shared-text", scope).href, new Response(text, { headers: { "Content-Type": "text/plain;charset=utf-8" } }));
+        }
+      } catch (e) {}
+      return Response.redirect(new URL("./?shared=1", scope).href, 303);
+    })());
+    return;
+  }
+
+  if (req.method !== "GET") return;
 
   // App page: try the network first so updates show up, fall back to the saved copy offline.
   if (req.mode === "navigate" && url.origin === location.origin) {

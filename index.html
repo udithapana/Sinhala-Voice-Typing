@@ -125,6 +125,23 @@ select,.input{background:var(--surface);border:1px solid var(--line);border-radi
 @keyframes spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.mic.rec::after,.mic.busy svg{animation:none}#meter i{transition:none}}
 
+/* pickers, translation panel, upload */
+.pickers{display:flex;gap:10px;flex-wrap:wrap;flex:0 1 auto}
+.sheet{position:relative}
+body.dropping .sheet{outline:3px dashed var(--accent);outline-offset:4px}
+body.dropping .sheet::after{content:"Drop the audio file to turn it into text";position:absolute;inset:0;display:grid;place-items:center;
+  background:color-mix(in srgb,var(--surface) 88%,transparent);border-radius:16px;font-weight:600;color:var(--accent);text-align:center;padding:16px}
+.trans{background:var(--surface);border:1px solid var(--accent);border-radius:16px;box-shadow:var(--shadow);display:flex;flex-direction:column;min-width:0}
+.trans-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 8px 8px 16px;border-bottom:1px solid var(--line)}
+.trans-title{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);font-weight:600}
+#transText{border:0;outline:0;background:transparent;resize:vertical;min-height:140px;width:100%;padding:14px 16px;font:400 18px/1.7 var(--f-text);color:var(--ink)}
+.trans-actions{display:flex;gap:8px;flex-wrap:wrap;padding:0 12px 12px}
+.icon-btn.sm{height:32px;min-width:32px;padding:0 6px}
+.up{width:52px;height:52px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--ink);display:grid;place-items:center;flex:none}
+.up svg{width:22px;height:22px}
+.up:disabled{opacity:.45;cursor:not-allowed}
+.linkbtn{border:0;background:none;padding:0;color:var(--danger);font-weight:600;font-size:13px;text-decoration:underline}
+
 /* toast */
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(118px + env(safe-area-inset-bottom,0px));z-index:20;
   max-width:min(560px,calc(100vw - 32px));background:var(--ink);color:var(--bg);border-radius:12px;padding:10px 14px;
@@ -185,13 +202,23 @@ dialog::backdrop{background:rgba(5,10,8,.5)}
       <button id="modeLive" aria-pressed="true">Live<small>free · instant</small></button>
       <button id="modeAI" aria-pressed="false">AI accurate<small>Gemini · best spelling</small></button>
     </div>
-    <div class="lang">
-      <label for="lang">Language</label>
-      <select id="lang">
-        <option value="si-LK">සිංහල</option>
-        <option value="ta-LK">தமிழ்</option>
-        <option value="en-US">English</option>
-      </select>
+    <div class="pickers">
+      <div class="lang">
+        <label for="lang">Spoken</label>
+        <select id="lang">
+          <option value="si-LK">සිංහල</option>
+          <option value="ta-LK">தமிழ்</option>
+          <option value="en-US">English</option>
+        </select>
+      </div>
+      <div class="lang">
+        <label for="outSel">Write as</label>
+        <select id="outSel">
+          <option value="same">As spoken</option>
+          <option value="target">English</option>
+          <option value="both">Both</option>
+        </select>
+      </div>
     </div>
   </section>
   <p class="modeinfo" id="modeInfo"></p>
@@ -205,6 +232,19 @@ dialog::backdrop{background:rgba(5,10,8,.5)}
     <div id="interim" hidden aria-live="polite"></div>
   </section>
 
+  <section class="trans" id="transPanel" hidden aria-label="Translation">
+    <div class="trans-bar">
+      <span class="trans-title" id="transTitle">English translation</span>
+      <button class="icon-btn sm" id="transClose" aria-label="Close translation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+    <textarea id="transText" lang="en" spellcheck="false"></textarea>
+    <div class="trans-actions">
+      <button class="tool" id="transCopy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>Copy</button>
+      <button class="tool" id="transAdd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Add below original</button>
+      <button class="tool" id="transReplace"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/></svg>Replace original</button>
+    </div>
+  </section>
+
   <div class="tools">
     <div class="grp" aria-label="Punctuation">
       <button class="tool p" data-ins=". " title="Full stop">.</button>
@@ -215,6 +255,7 @@ dialog::backdrop{background:rgba(5,10,8,.5)}
     <div class="grp">
       <button class="tool" id="undoBtn" title="Undo" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg><span class="lbl">Undo</span></button>
       <button class="tool ai" id="fixBtn" title="Fix spelling and punctuation with AI"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15v4M17 17h4"/></svg><span class="lbl">AI fix</span></button>
+      <button class="tool ai" id="transBtn" title="Translate Sinhala ↔ English (selection or all text)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg>Translate</button>
     </div>
     <span class="spacer"></span>
     <div class="grp">
@@ -232,10 +273,15 @@ dialog::backdrop{background:rgba(5,10,8,.5)}
       <div class="status-line">
         <span id="statusText">Ready</span>
         <span id="timer" hidden>00:00</span>
+        <button class="linkbtn" id="cancelBtn" hidden>Stop</button>
       </div>
       <div id="meter" hidden aria-hidden="true"></div>
       <span class="hint" id="hint">Tap the mic to start. Text goes where your cursor is.</span>
     </div>
+    <input type="file" id="fileIn" accept="audio/*,video/*,.opus,.ogg,.oga,.m4a,.mp3,.wav,.aac,.flac,.webm,.mp4" hidden>
+    <button class="up" id="uploadBtn" aria-label="Turn an audio file into text" title="Audio file / voice note">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M10 17a1.5 1.5 0 1 1-1.5-1.5H10v-5l4-1"/></svg>
+    </button>
     <button class="mic" id="micBtn" aria-label="Start recording">
       <svg id="micIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1"/><path d="M12 18v4"/></svg>
     </button>
@@ -274,6 +320,13 @@ dialog::backdrop{background:rgba(5,10,8,.5)}
       </div>
     </div>
     <div class="field">
+      <span class="lbl">Translation style</span>
+      <div class="radio">
+        <label><input type="radio" name="tstyle" value="natural" checked><span>Natural<small>Clear everyday English, like you would write a message.</small></span></label>
+        <label><input type="radio" name="tstyle" value="formal"><span>Formal<small>Professional tone for emails, letters and reports.</small></span></label>
+      </div>
+    </div>
+    <div class="field">
       <label for="vocab">Special words (one per line or comma separated)</label>
       <textarea id="vocab" placeholder="inverter&#10;kWp&#10;Regen Renewables&#10;net metering&#10;CEB"></textarea>
       <p>Names, brands and technical terms you use often. AI mode will spell them this way.</p>
@@ -306,11 +359,13 @@ const store = {
 /* ---------- elements & state ---------- */
 const ed = $("#editor"), interimEl = $("#interim"), micBtn = $("#micBtn"), micIcon = $("#micIcon");
 const statusText = $("#statusText"), timerEl = $("#timer"), meterEl = $("#meter"), hintEl = $("#hint");
-const langSel = $("#lang"), settings = $("#settings");
+const langSel = $("#lang"), outSel = $("#outSel"), settings = $("#settings");
 let mode = store.get("mode", "live");
 let state = "idle";            // idle | rec | busy
 let undoStack = [];
-let lastBlob = null;
+let job = null;                // running AI job {ctrl}
+let busyLabel = "";
+let pendingAudio = null;       // audio waiting for an API key
 
 const ICON_MIC = micIcon.innerHTML;
 const ICON_STOP = '<rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" stroke="none"/>';
@@ -319,10 +374,30 @@ const ICON_BUSY = '<path d="M21 12a9 9 0 1 1-6.2-8.6"/>';
 for(let i=0;i<28;i++) meterEl.appendChild(document.createElement("i"));
 const bars = [...meterEl.children];
 
+/* ---------- languages ---------- */
+const LANG_NAME = {"si-LK":"Sinhala", "ta-LK":"Tamil", "en-US":"English"};
+const LANG_LOCAL = {"si-LK":"සිංහල", "ta-LK":"தமிழ்", "en-US":"English"};
+const targetOf = lang => lang === "en-US" ? "si-LK" : "en-US";
+const outMode = () => outSel.value;
+function syncOutLabels(){
+  const t = targetOf(langSel.value);
+  outSel.options[1].textContent = t === "en-US" ? "English" : "සිංහල";
+  outSel.options[2].textContent = "Both";
+}
+function detectLang(t){
+  const si = (t.match(/[඀-෿]/g) || []).length;
+  const ta = (t.match(/[஀-௿]/g) || []).length;
+  if(!si && !ta) return "en-US";
+  return si >= ta ? "si-LK" : "ta-LK";
+}
+
 /* ---------- editor ---------- */
 ed.value = store.get("draft", "");
 ed.selectionStart = ed.selectionEnd = ed.value.length;
 langSel.value = store.get("lang", "si-LK");
+outSel.value = store.get("out", "same");
+if(!outSel.value) outSel.value = "same";
+syncOutLabels();
 let saveTimer;
 function persist(){ clearTimeout(saveTimer); saveTimer = setTimeout(() => store.set("draft", ed.value), 300); }
 function updateCount(){
@@ -343,27 +418,40 @@ function undo(){
   persist(); updateCount();
   $("#undoBtn").disabled = !undoStack.length;
 }
-function insertText(t, raw){
-  if(!t) return;
+function scrollToCaret(){
+  if(document.activeElement === ed) return;
+  const ratio = ed.selectionEnd / Math.max(1, ed.value.length);
+  ed.scrollTop = ratio * ed.scrollHeight - ed.clientHeight / 2;
+}
+/* Inserts at the cursor with sensible spacing. Returns {start, text} of what was inserted.
+   raw: insert exactly. para: keep it as its own paragraph (also automatic for multi-line text). */
+function insertText(t, raw, para){
+  if(!t) return null;
   pushUndo();
   const s = ed.selectionStart ?? ed.value.length, e = ed.selectionEnd ?? s;
   const before = ed.value.slice(0, s), after = ed.value.slice(e);
   let pre = "", post = "";
   if(!raw){
-    if(before && !/\s$/.test(before) && !/^[.,?!:;)\]]/.test(t)) pre = " ";
-    if(after && !/^[\s.,?!:;]/.test(after)) post = " ";
+    const block = para || /\n/.test(t);
+    const gap = n => n >= 2 ? "" : n === 1 ? "\n" : "\n\n";
+    if(before.trim()){
+      if(block) pre = gap((before.match(/\n*[ \t]*$/)[0].match(/\n/g) || []).length);
+      else if(!/\s$/.test(before) && !/^[.,?!:;)\]]/.test(t)) pre = " ";
+    }
+    if(after.trim()){
+      if(block) post = gap((after.match(/^[ \t]*\n*/)[0].match(/\n/g) || []).length);
+      else if(!/^[\s.,?!:;]/.test(after)) post = " ";
+    }
   }
-  ed.setRangeText(pre + t + post, s, e, "end");
-  persist(); updateCount();
-  if(document.activeElement !== ed){
-    const ratio = ed.selectionEnd / Math.max(1, ed.value.length);
-    ed.scrollTop = ratio * ed.scrollHeight - ed.clientHeight / 2;
-  }
+  const ins = pre + t + post;
+  ed.setRangeText(ins, s, e, "end");
+  persist(); updateCount(); scrollToCaret();
+  return {start: s, text: ins};
 }
-function replaceRange(text, s, e){
+function replaceRange(text, s, e, sel){
   pushUndo();
-  ed.setRangeText(text, s, e, "select");
-  persist(); updateCount();
+  ed.setRangeText(text, s, e, sel || "select");
+  persist(); updateCount(); scrollToCaret();
 }
 
 /* ---------- toast ---------- */
@@ -380,7 +468,7 @@ function toast(msg, opts = {}){
   }
   el.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.hidden = true, opts.ms || (opts.action ? 7000 : 3500));
+  toastTimer = setTimeout(() => el.hidden = true, opts.ms || (opts.action ? 9000 : 3800));
 }
 
 /* ---------- UI state ---------- */
@@ -394,13 +482,20 @@ function setMode(m){
 }
 function renderModeInfo(){
   const el = $("#modeInfo");
+  const tgt = LANG_NAME[targetOf(langSel.value)];
+  const out = outMode();
+  const outLine = out === "target" ? ` The text will be written in <b>${tgt}</b>.`
+    : out === "both" ? ` You'll get the original text and the <b>${tgt}</b> translation.` : "";
   if(mode === "live"){
     el.innerHTML = SR
-      ? "<b>Live mode:</b> words appear while you speak, using Google's free speech engine in Chrome. Use <b>AI fix</b> afterwards to clean spelling."
-      : "<b>Live mode needs Chrome or Edge.</b> This browser has no built-in speech engine. Switch to AI accurate mode.";
+      ? "<b>Live mode:</b> words appear while you speak (free, Chrome's speech engine)." +
+        (out === "same" ? " Use <b>AI fix</b> afterwards to clean spelling." : ` When you stop, AI translates it to <b>${tgt}</b>.`)
+      : "<b>Live mode needs Chrome or Edge.</b> This browser has no built-in speech engine. Switch to AI accurate mode, or upload a voice note.";
   }else{
-    el.innerHTML = "<b>AI accurate mode:</b> speak, then tap stop. Gemini writes the full text with correct Sinhala spelling and punctuation." +
-      (apiKey() ? "" : ' <button type="button" id="addKeyLink">Add your free API key</button> to start.');
+    el.innerHTML = "<b>AI accurate mode:</b> speak, then tap stop. Gemini writes it with correct spelling and punctuation." + outLine;
+  }
+  if(!apiKey() && (mode === "ai" || out !== "same")){
+    el.innerHTML += ' <button type="button" id="addKeyLink">Add your free API key</button> to start.';
     const l = $("#addKeyLink"); if(l) l.onclick = () => openSettings();
   }
 }
@@ -411,15 +506,45 @@ function setState(s, text){
   micBtn.disabled = s === "busy";
   micIcon.innerHTML = s === "rec" ? ICON_STOP : s === "busy" ? ICON_BUSY : ICON_MIC;
   micBtn.setAttribute("aria-label", s === "rec" ? "Stop recording" : "Start recording");
-  $("#modeLive").disabled = $("#modeAI").disabled = langSel.disabled = s !== "idle";
+  $("#modeLive").disabled = $("#modeAI").disabled = langSel.disabled = outSel.disabled = s !== "idle";
+  $("#uploadBtn").disabled = s !== "idle";
+  $("#cancelBtn").hidden = !(s === "busy" && job);
   timerEl.hidden = s !== "rec";
   meterEl.hidden = !(s === "rec" && mode === "ai");
-  statusText.textContent = text || (s === "rec" ? (mode === "live" ? "Listening…" : "Recording…") : s === "busy" ? "Working…" : "Ready");
+  busyLabel = text || (s === "rec" ? (mode === "live" ? "Listening…" : "Recording…") : s === "busy" ? "Working…" : "Ready");
+  statusText.textContent = busyLabel;
   hintEl.textContent = s === "rec"
     ? (mode === "live" ? "Speak naturally. Tap stop when done." : "Speak naturally. Tap stop and the AI will write it.")
-    : s === "busy" ? "Please wait, this takes a few seconds."
-    : "Tap the mic to start. Text goes where your cursor is.";
+    : s === "busy" ? "Please wait. Keep this screen open."
+    : "Tap the mic to start, or the file button to upload a voice note.";
   if(s !== "rec"){ interimEl.hidden = true; interimEl.textContent = ""; }
+}
+function setBusy(text, hint){
+  busyLabel = text; statusText.textContent = text;
+  if(hint !== undefined) hintEl.textContent = hint;
+}
+
+/* Runs an AI job with a Stop button and error toast. fn(signal) does the work. */
+async function runJob(label, fn){
+  const ctrl = new AbortController();
+  job = {ctrl};
+  setState("busy", label);
+  try{ return await fn(ctrl.signal); }
+  catch(e){
+    if(e.name === "AbortError") toast("Stopped.");
+    else toast(e.message || "Something went wrong.", {error:true, action: e.retry ? {label:"Retry", fn: e.retry} : null});
+  }finally{
+    job = null; setState("idle");
+  }
+}
+function abortErr(){ const e = new Error("Stopped"); e.name = "AbortError"; return e; }
+function sleep(sec, signal, tick){
+  return new Promise((res, rej) => {
+    if(signal?.aborted) return rej(abortErr());
+    let left = Math.ceil(sec); tick && tick(left);
+    const iv = setInterval(() => { left--; if(left <= 0){ clearInterval(iv); res(); } else tick && tick(left); }, 1000);
+    signal?.addEventListener("abort", () => { clearInterval(iv); rej(abortErr()); }, {once:true});
+  });
 }
 
 /* ---------- timer & wake lock ---------- */
@@ -428,24 +553,39 @@ function startTimer(){
   tStart = Date.now(); timerEl.textContent = "00:00";
   tInt = setInterval(() => {
     const sec = Math.floor((Date.now() - tStart) / 1000);
-    timerEl.textContent = String(Math.floor(sec/60)).padStart(2,"0") + ":" + String(sec%60).padStart(2,"0");
+    timerEl.textContent = fmtDur(sec);
     if(mode === "ai" && sec >= 3600) stopAI();
   }, 250);
-  try{ navigator.wakeLock?.request("screen").then(w => wake = w).catch(()=>{}); }catch(e){}
+  holdWake();
 }
-function stopTimer(){ clearInterval(tInt); try{ wake?.release(); }catch(e){} wake = null; }
+function stopTimer(){ clearInterval(tInt); releaseWake(); }
+function holdWake(){ try{ navigator.wakeLock?.request("screen").then(w => wake = w).catch(()=>{}); }catch(e){} }
+function releaseWake(){ try{ wake?.release(); }catch(e){} wake = null; }
+function fmtDur(sec){
+  sec = Math.round(sec);
+  const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+  return (h ? h + ":" + String(m).padStart(2,"0") : String(m).padStart(2,"0")) + ":" + String(s).padStart(2,"0");
+}
 
 /* ---------- LIVE mode (Web Speech API) ---------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const isAndroid = /Android/i.test(navigator.userAgent);
-let rec = null, liveOn = false;
+let rec = null, liveOn = false, live = null;   // live = text written this session
+function trackLive(r){
+  if(!r || !live) return;
+  if(live.start === null){ live.start = r.start; live.text = r.text; }
+  else if(r.start === live.start + live.text.length) live.text += r.text;
+  else live.broken = true;
+}
 function startLive(){
   if(!SR){ toast("Live mode needs Chrome or Edge. Switch to AI accurate mode.", {error:true}); return; }
+  if(outMode() !== "same" && !apiKey()){ openSettings("Add your Gemini API key to translate what you say."); return; }
   rec = new SR();
   rec.lang = langSel.value;
   rec.continuous = !isAndroid;      // Android repeats words in continuous mode
   rec.interimResults = true;
   rec.maxAlternatives = 1;
+  live = {start: null, text: "", broken: false};
   rec.onresult = ev => {
     let interim = "";
     for(let i = ev.resultIndex; i < ev.results.length; i++){
@@ -453,7 +593,7 @@ function startLive(){
       if(r.isFinal){
         let t = r[0].transcript.trim();
         if(t && $("#autoDot").checked && !/[.?!]$/.test(t)) t += ".";
-        insertText(t);
+        trackLive(insertText(t));
       }else interim += r[0].transcript;
     }
     interimEl.textContent = interim;
@@ -461,25 +601,20 @@ function startLive(){
   };
   rec.onerror = e => {
     if(e.error === "no-speech" || e.error === "aborted") return;
-    if(e.error === "not-allowed" || e.error === "service-not-allowed"){
-      liveOn = false;
-      toast("Microphone is blocked. Allow mic access in the browser's site settings.", {error:true});
-    }else if(e.error === "network"){
-      liveOn = false;
-      toast("Live mode needs an internet connection.", {error:true});
-    }else if(e.error === "language-not-supported"){
-      liveOn = false;
-      toast("This browser can't recognise that language live. Use Chrome, or switch to AI accurate mode.", {error:true});
-    }else if(e.error === "audio-capture"){
-      liveOn = false;
-      toast("No microphone found.", {error:true});
-    }
+    const msg = {
+      "not-allowed": "Microphone is blocked. Allow mic access in the browser's site settings.",
+      "service-not-allowed": "Microphone is blocked. Allow mic access in the browser's site settings.",
+      "network": "Live mode needs an internet connection.",
+      "language-not-supported": "This browser can't recognise that language live. Use Chrome, or switch to AI accurate mode.",
+      "audio-capture": "No microphone found."
+    }[e.error];
+    if(msg){ liveOn = false; toast(msg, {error:true}); }
   };
   rec.onend = () => {
     if(liveOn){
       setTimeout(() => { if(liveOn){ try{ rec.start(); }catch(_){} } }, isAndroid ? 50 : 150);
-    }else{
-      stopTimer(); setState("idle");
+    }else if(state === "rec"){
+      stopTimer(); setState("idle"); finishLive();
     }
   };
   try{ rec.start(); }catch(e){ toast("Could not start the microphone.", {error:true}); return; }
@@ -489,11 +624,34 @@ function stopLive(){
   liveOn = false;
   try{ rec && rec.stop(); }catch(e){}
   const pending = interimEl.textContent.trim();
-  if(pending) insertText(pending);
+  if(pending) trackLive(insertText(pending));
   stopTimer(); setState("idle");
+  finishLive();
+}
+/* After a live session: translate what was said, if "Write as" asks for it. */
+function finishLive(){
+  const sess = live; live = null;
+  if(!sess || !sess.text.trim() || outMode() === "same" || !apiKey()) return;
+  const src = sess.text.trim();
+  const from = langSel.value, to = targetOf(from);
+  const intact = () => !sess.broken && ed.value.slice(sess.start, sess.start + sess.text.length) === sess.text;
+  const go = () => runJob(`Translating to ${LANG_NAME[to]}…`, async signal => {
+    let tr;
+    try{ tr = await translateText(src, from, to, signal); }
+    catch(e){ e.retry = go; throw e; }
+    if(!tr) return;
+    const lead = sess.text.match(/^\s*/)[0], trail = sess.text.match(/\s*$/)[0];
+    const both = outMode() === "both";
+    if(intact()){
+      replaceRange(lead + (both ? src + "\n\n" + tr : tr) + trail, sess.start, sess.start + sess.text.length, "end");
+    }else{
+      insertText(tr);
+    }
+  });
+  go();
 }
 
-/* ---------- AI mode (record, then Gemini) ---------- */
+/* ---------- AI mode recording ---------- */
 let mediaRec = null, chunks = [], stream = null, meterCtx = null, raf = 0;
 async function startAI(){
   if(!apiKey()){ openSettings("Add your Gemini API key to use AI accurate mode."); return; }
@@ -509,13 +667,13 @@ async function startAI(){
   mediaRec = new MediaRecorder(stream, mime ? {mimeType:mime, audioBitsPerSecond:64000} : undefined);
   chunks = [];
   mediaRec.ondataavailable = e => { if(e.data && e.data.size) chunks.push(e.data); };
-  mediaRec.onstop = async () => {
+  mediaRec.onstop = () => {
     stopMeter();
     stream.getTracks().forEach(t => t.stop());
     stopTimer();
+    setState("idle");
     const blob = new Blob(chunks, {type: mediaRec.mimeType || mime || "audio/webm"});
-    lastBlob = blob;
-    await transcribeBlob(blob);
+    processAudio(blob, {kind:"recording"});
   };
   mediaRec.start(1000);
   startMeter(stream); startTimer(); setState("rec");
@@ -544,20 +702,40 @@ function startMeter(s){
 }
 function stopMeter(){ cancelAnimationFrame(raf); try{ meterCtx?.close(); }catch(e){} meterCtx = null; }
 
-async function toMono16k(blob){
-  const buf = await blob.arrayBuffer();
-  const AC = window.AudioContext || window.webkitAudioContext;
-  const ac = new AC();
-  let decoded;
-  try{
-    decoded = await new Promise((res, rej) => { const p = ac.decodeAudioData(buf, res, rej); if(p && p.then) p.then(res, rej); });
-  }finally{ try{ ac.close(); }catch(e){} }
-  const sr = 16000, len = Math.max(1, Math.ceil(decoded.duration * sr));
+/* ---------- audio helpers ---------- */
+const EXT_MIME = {opus:"audio/ogg", ogg:"audio/ogg", oga:"audio/ogg", mp3:"audio/mp3", wav:"audio/wav", m4a:"audio/mp4",
+  aac:"audio/aac", flac:"audio/flac", webm:"audio/webm", mp4:"video/mp4", "3gp":"video/3gpp"};
+const extOf = name => ((name || "").match(/\.([a-z0-9]+)$/i) || [,""])[1].toLowerCase();
+function isAudioFile(f){ return /^(audio|video)\//.test(f.type || "") || !!EXT_MIME[extOf(f.name)]; }
+function rawMime(blob){
+  const t = (blob.type || "").split(";")[0].trim();
+  if(/^(audio|video)\//.test(t)) return t === "audio/x-m4a" ? "audio/mp4" : t;
+  return EXT_MIME[extOf(blob.name)] || "";
+}
+async function decodeToMono(blob){
   const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
-  const off = new OAC(1, len, sr);
-  const src = off.createBufferSource(); src.buffer = decoded; src.connect(off.destination); src.start(0);
-  const out = await off.startRendering();
-  return out.getChannelData(0);
+  if(!OAC) throw new Error("no-audio-api");
+  let audio = null, lastErr = null;
+  for(const sr of [16000, 22050]){
+    try{
+      const buf = await blob.arrayBuffer();
+      const ctx = new OAC(1, 1, sr);
+      audio = await new Promise((res, rej) => {
+        const p = ctx.decodeAudioData(buf, res, rej);
+        if(p && p.then) p.then(res, rej);
+      });
+      break;
+    }catch(e){ lastErr = e; }
+  }
+  if(!audio) throw lastErr || new Error("decode");
+  const n = audio.length, ch = audio.numberOfChannels;
+  let pcm;
+  if(ch === 1) pcm = audio.getChannelData(0);
+  else{
+    pcm = new Float32Array(n);
+    for(let c = 0; c < ch; c++){ const d = audio.getChannelData(c); for(let i = 0; i < n; i++) pcm[i] += d[i] / ch; }
+  }
+  return {pcm, sr: audio.sampleRate};
 }
 function splitPcm(pcm, sr, maxSec){
   const parts = []; let start = 0;
@@ -595,90 +773,192 @@ function blobToB64(blob){
     r.readAsDataURL(blob);
   });
 }
-
-async function transcribeBlob(blob){
-  setState("busy", "Preparing audio…");
-  try{
-    const pcm = await toMono16k(blob);
-    if(pcm.length < 16000 * 0.4){ toast("Recording was too short. Hold on a little longer."); return; }
-    let peak = 0; for(let i=0;i<pcm.length;i+=4){ const a = Math.abs(pcm[i]); if(a > peak) peak = a; }
-    if(peak < 0.01){ toast("No sound was picked up. Check your microphone."); return; }
-    const gain = Math.min(8, 0.9 / peak);
-    const parts = splitPcm(pcm, 16000, 180);
-    const out = [];
-    for(let i=0;i<parts.length;i++){
-      statusText.textContent = parts.length > 1 ? `Writing part ${i+1} of ${parts.length}…` : "AI is writing…";
-      const t = await geminiAudio(encodeWav(parts[i], 16000, gain));
-      if(t) out.push(t);
-    }
-    const text = out.join(" ").trim();
-    if(text){ insertText(text); lastBlob = null; }
-    else toast("No speech was found in the recording.");
-  }catch(e){
-    toast(e.message || "Something went wrong.", {error:true, action: lastBlob ? {label:"Retry", fn:() => transcribeBlob(lastBlob)} : null});
-  }finally{
-    setState("idle");
+/* Turns any audio into ≤3-minute WAV parts, split at quiet moments. */
+async function audioToParts(blob){
+  let dec;
+  try{ dec = await decodeToMono(blob); }
+  catch(e){
+    // This browser can't read the format: send the original file if it is small enough.
+    const mime = rawMime(blob);
+    if(mime && blob.size <= 14 * 1048576) return {parts: [{blob, mime}], duration: null};
+    throw new Error("This browser can't read this audio file. Open the app in Chrome, or convert the file to MP3.");
   }
+  const {pcm, sr} = dec;
+  if(pcm.length < sr * 0.4) throw new Error("The recording is too short. Speak a little longer.");
+  let peak = 0; for(let i = 0; i < pcm.length; i += 4){ const a = Math.abs(pcm[i]); if(a > peak) peak = a; }
+  if(peak < 0.01) throw new Error("No sound was found. Check your microphone or the file.");
+  const gain = Math.min(8, 0.9 / peak);
+  return {parts: splitPcm(pcm, sr, 180).map(p => ({pcm: p, sr, gain})), duration: pcm.length / sr};
 }
 
-/* ---------- Gemini ---------- */
-const LANG_NAME = {"si-LK":"Sinhala (Sri Lanka)", "ta-LK":"Tamil (Sri Lanka)", "en-US":"English"};
+/* ---------- main audio → text pipeline (recordings and files) ---------- */
+async function processAudio(blob, opts = {}){
+  if(!apiKey()){
+    pendingAudio = {blob, opts};
+    openSettings(opts.kind === "file" ? "Add your Gemini API key to turn this file into text." : "Add your Gemini API key to use AI.");
+    return;
+  }
+  const from = langSel.value, to = targetOf(from), out = outMode();
+  const st = {parts: null, idx: 0, pos: null, from, to, out, name: opts.name || ""};
+  const go = () => runJob(opts.kind === "file" ? "Reading the file…" : "Preparing audio…", async signal => {
+    holdWake();
+    try{
+      if(!st.parts){
+        const r = await audioToParts(blob);
+        st.parts = r.parts;
+        st.info = st.name ? st.name + (r.duration ? " · " + fmtDur(r.duration) : "") : "";
+      }
+      const n = st.parts.length;
+      for(; st.idx < n; st.idx++){
+        if(signal.aborted) throw abortErr();
+        const what = out === "target" ? `Translating to ${LANG_NAME[to]}` : "AI is writing";
+        setBusy(n > 1 ? `${what} · part ${st.idx + 1} of ${n}…` : `${what}…`,
+          (st.info ? st.info + ". " : "") + "Keep this screen open.");
+        const text = await partToText(st.parts[st.idx], st, signal);
+        if(text){
+          if(st.pos !== null && st.pos <= ed.value.length) ed.selectionStart = ed.selectionEnd = st.pos;
+          const r = insertText(text, false, n > 1);
+          st.pos = r.start + r.text.length;
+          st.any = true;
+        }
+      }
+      if(!st.any) toast("No speech was found in the audio.");
+      else if(n > 1) toast(`Done. ${n} parts written.`);
+    }catch(e){
+      if(e.name !== "AbortError" && st.parts){
+        const left = st.parts.length - st.idx;
+        e.message += left > 1 || st.idx > 0 ? ` (${left} part${left === 1 ? "" : "s"} left)` : "";
+        e.retry = go;
+      }else if(e.name !== "AbortError" && !/browser can't|too short|No sound/.test(e.message)){
+        e.retry = go;
+      }
+      throw e;
+    }finally{ releaseWake(); }
+  });
+  return go();
+}
+async function partToText(part, st, signal){
+  const audio = part.blob
+    ? {inline_data: {mime_type: part.mime, data: await blobToB64(part.blob)}}
+    : {inline_data: {mime_type: "audio/wav", data: await blobToB64(encodeWav(part.pcm, part.sr, part.gain))}};
+  if(st.out === "target") return gem([{text: audioPrompt("translate", st.from, st.to)}, audio], signal);
+  const t = await gem([{text: audioPrompt("transcribe", st.from)}, audio], signal);
+  if(st.out === "both" && t){
+    const tr = await translateText(t, st.from, st.to, signal);
+    return tr ? t + "\n\n" + tr : t;
+  }
+  return t;
+}
+
+/* ---------- prompts ---------- */
 function vocabList(){
   return store.get("vocab","").split(/[\n,]+/).map(s => s.trim()).filter(Boolean).slice(0, 200);
 }
-function audioPrompt(){
-  const lang = langSel.value, name = LANG_NAME[lang] || "Sinhala";
-  const clean = store.get("style","clean") === "clean";
-  const script = lang === "si-LK" ? "correct Sinhala Unicode script (සිංහල අකුරු) with correct spelling"
-    : lang === "ta-LK" ? "correct Tamil Unicode script with correct spelling" : "correct English spelling";
+function styleLine(to){
+  const formal = store.get("tstyle", "natural") === "formal";
+  if(to === "en-US") return formal ? "Use formal, professional English suitable for business emails, letters and reports." : "Use natural, clear everyday English.";
+  return formal ? "Use formal written Sinhala suitable for official letters, in Sinhala Unicode script." : "Use natural, clear written Sinhala in Sinhala Unicode script.";
+}
+function audioPrompt(kind, from, to){
+  const name = LANG_NAME[from];
   const v = vocabList();
+  const vocab = v.length ? `- These words may appear; spell them exactly like this: ${v.join(", ")}` : "";
+  if(kind === "translate"){
+    return [
+      `Listen to this recording. The speaker is speaking ${name}, possibly mixed with English words.`,
+      `Translate everything that is said into ${LANG_NAME[to]}.`,
+      "Rules:",
+      "- " + styleLine(to),
+      "- Translate the full content. Do not summarise or skip anything.",
+      "- Keep names, brand names, technical terms and units accurate. Write numbers as digits.",
+      "- Leave out filler sounds, stutters and false starts.",
+      "- Start a new paragraph when the topic changes.",
+      `- Do not include the ${name} text. Do not add notes, headings, labels, quotes or timestamps.`,
+      "- If there is no clear speech, return an empty response.",
+      vocab,
+      `Return only the ${LANG_NAME[to]} translation.`
+    ].filter(Boolean).join("\n");
+  }
+  const clean = store.get("style","clean") === "clean";
+  const script = from === "si-LK" ? "correct Sinhala Unicode script (සිංහල අකුරු) with correct spelling"
+    : from === "ta-LK" ? "correct Tamil Unicode script with correct spelling" : "correct English spelling";
   return [
-    `Transcribe this audio recording. The speaker is speaking ${name}, possibly mixed with English words.`,
+    `Transcribe this audio recording. The speaker is speaking ${name}${from === "en-US" ? "" : " (Sri Lanka)"}, possibly mixed with English words.`,
     "Rules:",
     `- Write the speech in ${script}.`,
-    lang !== "en-US" ? "- Write English words (technical terms, brand names, units, acronyms) in English letters, exactly as spoken." : "",
+    from !== "en-US" ? "- Write English words (technical terms, brand names, units, acronyms) in English letters, exactly as spoken." : "",
     "- Write numbers, amounts and measurements as digits.",
     "- Add natural punctuation (full stops, commas, question marks) and start a new paragraph when the topic changes.",
     clean ? "- Remove filler sounds, stutters, repeated words and false starts. When the speaker corrects themselves, keep only the corrected version. Keep the speaker's own words otherwise."
           : "- Write exactly what was said, word for word, including repeated words.",
     "- Do not translate. Do not summarise. Do not add commentary, headings, labels, quotes or timestamps.",
     "- If there is no clear speech, return an empty response.",
-    v.length ? `- These words may appear; spell them exactly like this: ${v.join(", ")}` : "",
+    vocab,
     "Return only the transcript text."
   ].filter(Boolean).join("\n");
 }
+async function translateText(text, from, to, signal){
+  const v = vocabList();
+  const prompt = [
+    `Translate the following ${LANG_NAME[from]} text into ${LANG_NAME[to]}.`,
+    "- " + styleLine(to),
+    "- Keep the meaning exactly. Do not add, drop or summarise anything.",
+    "- Keep names, brand names, technical terms, units and numbers as they are. Write numbers as digits.",
+    "- Keep the paragraph breaks and lists.",
+    v.length ? "- Spell these terms exactly like this: " + v.join(", ") : "",
+    "- Return only the translation, with no notes, labels or quotes.",
+    "", "TEXT:", text
+  ].filter((x, i) => x !== "" || i > 5).join("\n");
+  return gem([{text: prompt}], signal);
+}
+
+/* ---------- Gemini ---------- */
 function thinkingConfig(model){
   if(/^gemini-2\.5-flash/.test(model)) return {thinkingBudget: 0};
   if(/^gemini-[3-9]/.test(model) || /latest/.test(model)) return {thinkingLevel: "low"};
   return null;
 }
-async function gemCall(model, body){
+async function gemCall(model, body, signal){
   const url = `${BASE}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey())}`;
   let r;
   try{
-    r = await fetch(url, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
-  }catch(e){ throw new Error("No internet connection. Check your network and try again."); }
+    r = await fetch(url, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body), signal});
+  }catch(e){
+    if(e.name === "AbortError") throw e;
+    throw new Error("No internet connection. Check your network and try again.");
+  }
   let j = null; try{ j = await r.json(); }catch(e){}
   if(!r.ok){
     const msg = j?.error?.message || "";
-    const err = new Error(friendlyError(r.status, msg)); err.status = r.status; err.raw = msg; throw err;
+    const err = new Error(friendlyError(r.status, msg)); err.status = r.status; err.raw = msg;
+    const ri = (j?.error?.details || []).find(d => /RetryInfo/.test(d["@type"] || ""));
+    if(ri?.retryDelay) err.retryAfter = parseFloat(ri.retryDelay);
+    throw err;
   }
   const cand = j?.candidates?.[0];
   if(!cand){
-    if(j?.promptFeedback?.blockReason) throw new Error("Gemini refused this audio (" + j.promptFeedback.blockReason + ").");
+    if(j?.promptFeedback?.blockReason) throw new Error("Gemini refused this request (" + j.promptFeedback.blockReason + ").");
     return "";
   }
   return (cand.content?.parts || []).filter(p => p.text && !p.thought).map(p => p.text).join("").trim();
 }
-async function gem(parts){
+async function gem(parts, signal){
   const model = store.get("model", "gemini-flash-latest");
   const tc = thinkingConfig(model);
   const body = {contents:[{role:"user", parts}]};
   if(tc) body.generationConfig = {thinkingConfig: tc};
-  try{ return await gemCall(model, body); }
-  catch(e){
-    if(tc && e.status === 400 && /think/i.test(e.raw || "")){ delete body.generationConfig; return await gemCall(model, body); }
-    throw e;
+  for(let attempt = 0; ; attempt++){
+    try{ return await gemCall(model, body, signal); }
+    catch(e){
+      if(e.name === "AbortError") throw e;
+      if(body.generationConfig && e.status === 400 && /think/i.test(e.raw || "")){ delete body.generationConfig; attempt--; continue; }
+      const retryable = e.status === 429 || e.status >= 500;
+      if(!retryable || attempt >= 3) throw e;
+      const label = busyLabel;
+      await sleep(Math.min(60, e.retryAfter || [6, 15, 30][attempt]), signal,
+        s => statusText.textContent = `Gemini is busy. Trying again in ${s} s…`);
+      statusText.textContent = label;
+    }
   }
 }
 function friendlyError(status, msg){
@@ -686,14 +966,12 @@ function friendlyError(status, msg){
   if(status === 403) return "This API key isn't allowed here. Check its restrictions in Google Cloud.";
   if(status === 429) return "Gemini usage limit reached. Wait a minute and retry.";
   if(status === 404) return "That AI model isn't available. Pick another model in Settings.";
-  if(status === 413) return "Recording is too large. Try a shorter recording.";
+  if(status === 413) return "The audio is too large. Try a shorter file.";
   if(status >= 500) return "Gemini is busy right now. Try again in a moment.";
   return msg ? "Gemini: " + msg : "Gemini request failed (" + status + ").";
 }
-async function geminiAudio(wav){
-  const data = await blobToB64(wav);
-  return gem([{text: audioPrompt()}, {inline_data:{mime_type:"audio/wav", data}}]);
-}
+
+/* ---------- AI fix ---------- */
 async function aiFix(){
   if(!apiKey()){ openSettings("Add your Gemini API key to use AI fix."); return; }
   if(state !== "idle") return;
@@ -701,27 +979,124 @@ async function aiFix(){
   if(s === e){ s = 0; e = ed.value.length; }
   const text = ed.value.slice(s, e);
   if(!text.trim()){ toast("Nothing to fix yet."); return; }
-  const name = LANG_NAME[langSel.value] || "Sinhala";
+  const lang = detectLang(text);
   const v = vocabList();
   const prompt = [
-    `You are a careful ${name} proofreader. The text below was produced by speech recognition.`,
-    "Correct mis-recognised words, spelling mistakes and wrong letters (for example wrong ණ/න, ළ/ල, aspirated letters, or missing pillam).",
+    `You are a careful ${LANG_NAME[lang]} proofreader. The text below was produced by speech recognition.`,
+    lang === "si-LK" ? "Correct mis-recognised words, spelling mistakes and wrong letters (for example wrong ණ/න, ළ/ල, aspirated letters, or missing pillam)." : "Correct mis-recognised words and spelling mistakes.",
     "Add correct punctuation and paragraph breaks.",
     "Keep English technical terms, names and numbers as they are.",
     "Do not change the meaning. Do not translate. Do not add or remove information. Do not add comments.",
     v.length ? "Spell these words exactly like this: " + v.join(", ") : "",
     "Return only the corrected text.",
     "", "TEXT:", text
-  ].filter(x => x !== "").join("\n");
-  setState("busy", "AI is fixing the text…");
+  ].filter((x, i) => x !== "" || i > 5).join("\n");
+  await runJob("AI is fixing the text…", async signal => {
+    const fixed = await gem([{text: prompt}], signal);
+    if(!fixed) throw new Error("AI returned nothing. Try again.");
+    if(ed.value.slice(s, e) !== text) throw new Error("The text changed while the AI was working. Try again.");
+    replaceRange(fixed, s, e);
+    toast("Text fixed.", {action:{label:"Undo", fn: undo}});
+  });
+}
+
+/* ---------- Translate button & panel ---------- */
+let transSrc = null;
+async function translateSelection(){
+  if(!apiKey()){ openSettings("Add your Gemini API key to translate."); return; }
+  if(state !== "idle") return;
+  let s = ed.selectionStart, e = ed.selectionEnd;
+  if(s === e){ s = 0; e = ed.value.length; }
+  const text = ed.value.slice(s, e);
+  if(!text.trim()){ toast("Nothing to translate yet. Speak or type first."); return; }
+  const from = detectLang(text), to = targetOf(from);
+  await runJob(`Translating to ${LANG_NAME[to]}…`, async signal => {
+    const tr = await translateText(text, from, to, signal);
+    if(!tr) throw new Error("The AI returned no translation. Try again.");
+    showTranslation(tr, to, {s, e, text});
+  });
+}
+function showTranslation(tr, to, src){
+  transSrc = src;
+  $("#transTitle").textContent = `${LANG_NAME[to]} translation`;
+  const ta = $("#transText");
+  ta.lang = to.slice(0, 2);
+  ta.value = tr;
+  $("#transPanel").hidden = false;
+  ta.style.height = "auto";
+  ta.style.height = Math.min(window.innerHeight * 0.5, Math.max(140, ta.scrollHeight + 4)) + "px";
+  $("#transPanel").scrollIntoView({behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "nearest"});
+}
+const srcIntact = () => transSrc && ed.value.slice(transSrc.s, transSrc.e) === transSrc.text;
+function closeTranslation(){ $("#transPanel").hidden = true; transSrc = null; }
+$("#transBtn").onclick = translateSelection;
+$("#transClose").onclick = closeTranslation;
+$("#transCopy").onclick = async () => {
+  const t = $("#transText").value;
+  try{ await navigator.clipboard.writeText(t); toast("Translation copied."); }
+  catch(e){ $("#transText").focus(); $("#transText").select(); toast("Translation selected. Press copy on your keyboard."); }
+};
+$("#transAdd").onclick = () => {
+  const t = $("#transText").value.trim(); if(!t) return;
+  const at = srcIntact() ? transSrc.e : ed.value.length;
+  const before = ed.value.slice(0, at);
+  replaceRange((before.trim() ? (/\n\n$/.test(before) ? "" : /\n$/.test(before) ? "\n" : "\n\n") : "") + t, at, at, "end");
+  closeTranslation();
+  toast("Translation added.", {action:{label:"Undo", fn: undo}});
+};
+$("#transReplace").onclick = () => {
+  const t = $("#transText").value.trim(); if(!t) return;
+  if(!srcIntact()){ toast("The original text was changed. Use Add below original instead.", {error:true}); return; }
+  replaceRange(t, transSrc.s, transSrc.e, "end");
+  closeTranslation();
+  toast("Original replaced with the translation.", {action:{label:"Undo", fn: undo}});
+};
+
+/* ---------- audio file upload, drag & drop, share ---------- */
+const fileIn = $("#fileIn");
+$("#uploadBtn").onclick = () => { if(state === "idle") fileIn.click(); };
+fileIn.onchange = () => { const f = fileIn.files[0]; fileIn.value = ""; if(f) handleFile(f); };
+function handleFile(f){
+  if(state !== "idle"){ toast("Wait for the current job to finish."); return; }
+  if(!isAudioFile(f)){ toast("Choose an audio or video file, such as a voice note, MP3, M4A or WAV.", {error:true}); return; }
+  if(f.size > 200 * 1048576){ toast(`This file is ${Math.round(f.size / 1048576)} MB. Use a file under 200 MB.`, {error:true}); return; }
+  processAudio(f, {kind:"file", name: f.name || "Voice note"});
+}
+let dragDepth = 0;
+const hasFiles = e => [...(e.dataTransfer?.types || [])].includes("Files");
+document.addEventListener("dragenter", e => { if(hasFiles(e)){ e.preventDefault(); dragDepth++; document.body.classList.add("dropping"); } });
+document.addEventListener("dragleave", e => { if(hasFiles(e) && --dragDepth <= 0){ dragDepth = 0; document.body.classList.remove("dropping"); } });
+document.addEventListener("dragover", e => { if(hasFiles(e)) e.preventDefault(); });
+document.addEventListener("drop", e => {
+  if(!hasFiles(e)) return;
+  e.preventDefault(); dragDepth = 0; document.body.classList.remove("dropping");
+  const f = [...e.dataTransfer.files].find(isAudioFile);
+  if(f) handleFile(f); else toast("That isn't an audio file.", {error:true});
+});
+/* Files and text shared to the installed app (Android share menu) arrive through the service worker. */
+async function checkShared(){
+  if(!new URLSearchParams(location.search).has("shared")) return;
+  history.replaceState(null, "", location.pathname);
+  if(!("caches" in window)) return;
   try{
-    const fixed = await gem([{text: prompt}]);
-    if(fixed){
-      replaceRange(fixed, s, e);
-      toast("Text fixed.", {action:{label:"Undo", fn: undo}});
-    }else toast("AI returned nothing. Try again.");
-  }catch(err){ toast(err.message, {error:true}); }
-  finally{ setState("idle"); }
+    const cache = await caches.open("katha-share");
+    const aKey = new URL("shared-audio", location.href).href, tKey = new URL("shared-text", location.href).href;
+    const [aRes, tRes] = await Promise.all([cache.match(aKey), cache.match(tKey)]);
+    await Promise.all([cache.delete(aKey), cache.delete(tKey)]);
+    if(aRes){
+      const blob = await aRes.blob();
+      const name = decodeURIComponent(aRes.headers.get("X-File-Name") || "Voice note");
+      handleFile(new File([blob], name, {type: blob.type || aRes.headers.get("Content-Type") || ""}));
+    }else if(tRes){
+      const t = (await tRes.text()).trim();
+      if(t){
+        ed.selectionStart = ed.selectionEnd = ed.value.length;
+        const r = insertText(t);
+        ed.setSelectionRange(r.start + r.text.indexOf(t), r.start + r.text.indexOf(t) + t.length);
+        toast("Shared text added.", {action:{label:"Translate", fn: translateSelection}});
+      }
+    }else toast("The shared item didn't arrive. Try sharing it again.", {error:true});
+  }catch(e){ toast("Couldn't open the shared item.", {error:true}); }
 }
 
 /* ---------- model list ---------- */
@@ -760,7 +1135,8 @@ function openSettings(note){
   const n = $("#settingsNote");
   n.hidden = !note; n.textContent = note || "";
   $("#apiKey").value = store.get("key", "");
-  if(typeof settings.showModal === "function") settings.showModal(); else settings.setAttribute("open", "");
+  if(typeof settings.showModal === "function"){ if(!settings.open) settings.showModal(); }
+  else settings.setAttribute("open", "");
   if(note) setTimeout(() => $("#apiKey").focus(), 50);
 }
 function closeSettings(){ if(settings.close) settings.close(); else settings.removeAttribute("open"); renderModeInfo(); }
@@ -782,16 +1158,23 @@ $("#testKey").onclick = async () => {
     fillModels(list, true);
     st.innerHTML = `<span class="pill">Key works · ${list.length} models</span>`;
     $("#settingsNote").hidden = true;
+    if(pendingAudio && state === "idle"){
+      const p = pendingAudio; pendingAudio = null;
+      closeSettings();
+      processAudio(p.blob, p.opts);
+    }
   }catch(e){
     st.innerHTML = ""; const p = document.createElement("span"); p.className = "pill bad"; p.textContent = e.message; st.appendChild(p);
   }
   renderModeInfo();
 };
 $("#model").onchange = e => store.set("model", e.target.value);
-document.querySelectorAll('input[name="style"]').forEach(r => {
-  r.checked = r.value === store.get("style", "clean");
-  r.onchange = () => store.set("style", r.value);
-});
+for(const [name, key, def] of [["style", "style", "clean"], ["tstyle", "tstyle", "natural"]]){
+  document.querySelectorAll(`input[name="${name}"]`).forEach(r => {
+    r.checked = r.value === store.get(key, def);
+    r.onchange = () => store.set(key, r.value);
+  });
+}
 $("#vocab").value = store.get("vocab", "");
 $("#vocab").addEventListener("input", e => store.set("vocab", e.target.value));
 $("#autoDot").checked = store.get("autoDot", "0") === "1";
@@ -835,23 +1218,26 @@ if(navigator.share){
 }
 $("#clearBtn").onclick = () => {
   if(!ed.value) return;
-  pushUndo(); ed.value = ""; persist(); updateCount();
+  pushUndo(); ed.value = ""; persist(); updateCount(); closeTranslation();
   toast("Cleared.", {action:{label:"Undo", fn: undo}});
 };
 
-/* ---------- mic ---------- */
+/* ---------- mic & controls ---------- */
 micBtn.onclick = () => {
   if(state === "busy") return;
   if(state === "rec"){ mode === "live" ? stopLive() : stopAI(); return; }
   mode === "live" ? startLive() : startAI();
 };
+$("#cancelBtn").onclick = () => job?.ctrl.abort();
 document.addEventListener("keydown", e => {
   if(e.key === "Escape" && state === "rec"){ mode === "live" ? stopLive() : stopAI(); }
+  else if(e.key === "Escape" && state === "busy" && job) job.ctrl.abort();
   if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "m"){ e.preventDefault(); micBtn.click(); }
 });
 $("#modeLive").onclick = () => setMode("live");
 $("#modeAI").onclick = () => setMode("ai");
-langSel.onchange = () => { store.set("lang", langSel.value); ed.lang = langSel.value.slice(0, 2); };
+langSel.onchange = () => { store.set("lang", langSel.value); ed.lang = langSel.value.slice(0, 2); syncOutLabels(); renderModeInfo(); };
+outSel.onchange = () => { store.set("out", outSel.value); renderModeInfo(); };
 ed.lang = langSel.value.slice(0, 2);
 window.addEventListener("beforeunload", e => { if(state !== "idle"){ e.preventDefault(); e.returnValue = ""; } });
 
@@ -872,6 +1258,7 @@ window.addEventListener("offline", () => toast("You're offline. Your text is saf
 
 updateCount();
 setMode(mode === "ai" ? "ai" : "live");
+checkShared();
 })();
 </script>
 </body>
